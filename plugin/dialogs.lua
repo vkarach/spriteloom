@@ -166,7 +166,7 @@ local function showResults(imgs, onInserted)
   }
   dlg:button{ text = "Close" }
   dlg:show{ wait = true }  -- opened from a WS callback, no nested modal loop
-  app.refresh()            -- repaint the area this window occupied
+  app.refresh()
 end
 
 function D.open()

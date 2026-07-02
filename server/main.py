@@ -111,8 +111,6 @@ def _run(req, on_progress, on_stage):
     for img in raw:
         cut = remove_background(img, tolerance=16)
         if req.mode == "generate":
-            # Crop to the subject so it gets all the target pixels instead
-            # of shrinking together with the empty canvas around it.
             cut = crop_to_subject(cut)
         small = fit_into(cut, req.target_size)
         small = snap_to_palette(small, pal or subject_palette(cut, 16))

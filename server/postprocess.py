@@ -105,8 +105,8 @@ def snap_to_palette(img: Image.Image, palette: list[tuple[int, int, int]]) -> Im
     arr = np.asarray(img.convert("RGBA")).astype(int)
     h, w = arr.shape[:2]
     flat = arr.reshape(-1, 4)
-    pal = np.array(palette, dtype=int)  # (P, 3)
-    dists = ((flat[:, None, :3] - pal[None, :, :]) ** 2).sum(axis=2)  # (N, P)
+    pal = np.array(palette, dtype=int)
+    dists = ((flat[:, None, :3] - pal[None, :, :]) ** 2).sum(axis=2)
     snapped = pal[dists.argmin(axis=1)]
     out = np.concatenate([snapped, flat[:, 3:4]], axis=1).astype(np.uint8)
     out[out[:, 3] == 0] = 0  # fully transparent pixels carry no stray color
