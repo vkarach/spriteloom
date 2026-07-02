@@ -109,8 +109,15 @@ function D._runJob(payload)
 
   job = client.request(payload, {
     onprogress = function(v)
-      dlg:modify{ id = "status",
-                  text = string.format("Generating... %d%%", math.floor(v * 100)) }
+      local text
+      if v < 0.85 then
+        text = string.format("Generating... %d%%", math.floor(v * 100))
+      elseif v < 0.95 then
+        text = "Decoding images (takes a moment)..."
+      else
+        text = "Post-processing..."
+      end
+      dlg:modify{ id = "status", text = text }
     end,
     onresult = function(images)
       dlg:close()

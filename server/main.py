@@ -3,6 +3,8 @@ import asyncio
 import functools
 import json
 import logging
+import pathlib
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import websockets
@@ -14,6 +16,24 @@ from server.protocol import ProtocolError, parse_request, error_msg, progress_ms
 log = logging.getLogger("spriteforge")
 
 _gpu_executor = ThreadPoolExecutor(max_workers=1)
+DEBUG_DIR = pathlib.Path("output")
+
+
+def _save_debug(req, raw_images):
+    """Keep every request's uncompressed originals + settings for debugging."""
+    try:
+        DEBUG_DIR.mkdir(exist_ok=True)
+        safe_id = "".join(c if c.isalnum() or c == "-" else "_" for c in req.id)
+        stem = f"{time.strftime('%Y%m%d-%H%M%S')}_{req.mode}_{safe_id}"
+        for n, img in enumerate(raw_images):
+            img.save(DEBUG_DIR / f"{stem}_{n}_raw.png")
+        meta = {"mode": req.mode, "prompt": req.prompt,
+                "variants": req.variants, "strength": req.strength,
+                "target_size": list(req.target_size)}
+        (DEBUG_DIR / f"{stem}.json").write_text(
+            json.dumps(meta, indent=2), encoding="utf-8")
+    except OSError:
+        log.exception("debug save failed")  # never break generation over this
 
 
 def _default_pipeline_factory():
@@ -33,23 +53,31 @@ def _get_pipeline():
 
 
 def _run(req, on_progress):
-    """Blocking generation + postprocess. Runs in a worker thread."""
+    """Blocking generation + postprocess. Runs in a worker thread.
+
+    Progress honesty: diffusion steps only cover 0..0.85 of the bar; VAE
+    decode happens inside the pipeline call after the last step, so 0.85
+    is where the bar waits for it.  0.95 = decoding done, postprocessing.
+    """
     pipe = _get_pipeline()
+    step_progress = lambda v: on_progress(v * 0.85)
     if req.mode == "generate":
         raw = pipe.txt2img(req.prompt, variants=req.variants,
-                           on_progress=on_progress)
+                           on_progress=step_progress)
         palette_src = None
     elif req.mode == "edit":
         raw = pipe.img2img(req.prompt, req.frames[0].image,
                            strength=req.strength, variants=req.variants,
-                           on_progress=on_progress)
+                           on_progress=step_progress)
         palette_src = req.frames[0].image
     else:  # inpaint — parse_request guarantees image+mask exist
         raw = pipe.inpaint(req.prompt, req.frames[0].image,
                            req.frames[0].mask, variants=req.variants,
-                           on_progress=on_progress)
+                           on_progress=step_progress)
         palette_src = req.frames[0].image
 
+    on_progress(0.95)
+    _save_debug(req, raw)
     pal = sprite_palette(palette_src) if palette_src is not None else None
     out = []
     for img in raw:
