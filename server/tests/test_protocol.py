@@ -89,3 +89,29 @@ def test_response_builders():
     assert res["type"] == "result" and len(res["images"]) == 1
     err = json.loads(error_msg("r1", "boom"))
     assert err == {"id": "r1", "type": "error", "message": "boom"}
+
+
+def test_parse_instruct_requires_frame_image():
+    with pytest.raises(ProtocolError):
+        parse_request(json.dumps({
+            "id": "x", "mode": "instruct", "prompt": "side view",
+            "target_size": [16, 16], "frames": [],
+        }))
+
+
+def test_parse_instruct_accepts_frame():
+    b64 = image_to_b64(_red_16())
+    req = parse_request(json.dumps({
+        "id": "i1", "mode": "instruct", "prompt": "side view",
+        "target_size": [16, 16],
+        "frames": [{"image": b64, "mask": None}],
+    }))
+    assert req.mode == "instruct"
+    assert req.frames[0].image.size == (16, 16)
+
+
+def test_progress_msg_stage_optional():
+    assert "stage" not in json.loads(progress_msg("r", 0.5))
+    msg = json.loads(progress_msg("r", 0.0, stage="Loading model..."))
+    assert msg["stage"] == "Loading model..."
+    assert msg["type"] == "progress"

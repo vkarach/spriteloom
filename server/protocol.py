@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
-VALID_MODES = ("generate", "edit", "inpaint")
+VALID_MODES = ("generate", "edit", "inpaint", "instruct")
 
 
 class ProtocolError(Exception):
@@ -69,7 +69,8 @@ def parse_request(text: str) -> Request:
         mask = image_from_b64(f["mask"]) if f.get("mask") else None
         frames.append(Frame(image=img, mask=mask))
 
-    if mode in ("edit", "inpaint") and (not frames or frames[0].image is None):
+    if mode in ("edit", "inpaint", "instruct") and (
+            not frames or frames[0].image is None):
         raise ProtocolError(f"mode '{mode}' requires a frame image")
     if mode == "inpaint" and frames[0].mask is None:
         raise ProtocolError("inpaint requires a mask")
@@ -82,8 +83,11 @@ def parse_request(text: str) -> Request:
     )
 
 
-def progress_msg(req_id: str, value: float) -> str:
-    return json.dumps({"id": req_id, "type": "progress", "value": value})
+def progress_msg(req_id: str, value: float, stage: str | None = None) -> str:
+    data = {"id": req_id, "type": "progress", "value": value}
+    if stage is not None:
+        data["stage"] = stage
+    return json.dumps(data)
 
 
 def result_msg(req_id: str, images: list[Image.Image]) -> str:
