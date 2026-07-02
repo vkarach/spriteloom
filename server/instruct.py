@@ -1,7 +1,7 @@
 """FLUX.2 Klein 4B: instruction-based sprite editing (view/pose changes)."""
 import logging
 
-from server.pipeline import upscale_for_model
+from PIL import Image
 
 MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
 STYLE_SUFFIX = ". Keep the same pixel art style, colors and character design."
@@ -45,10 +45,30 @@ class InstructPipeline:
             return kw
         return cb
 
+    @staticmethod
+    def _prep_input(image):
+        """Integer-factor upscale + pad to model-friendly dims.
+
+        The model mimics the pixel grid it is shown. A fractional upscale
+        (70px -> 512 is x7.31) shows it stretched pixels and it answers with
+        off-grid, wobbly shapes (crooked eye frames). Integer scaling keeps
+        the grid honest; the padding to a multiple of 16 is cropped off the
+        output before postprocessing.
+        """
+        rgb = image.convert("RGB")
+        w, h = rgb.size
+        k = max(1, MAX_SIDE // max(w, h))
+        big = rgb.resize((w * k, h * k), Image.NEAREST)
+        pw = -(-big.width // 16) * 16
+        ph = -(-big.height // 16) * 16
+        canvas = Image.new("RGB", (pw, ph), (0, 0, 0))
+        canvas.paste(big, (0, 0))
+        return canvas, (big.width, big.height)
+
     def edit_by_instruction(self, instruction, image, variants=4,
                             on_progress=None):
         self.load()
-        big = upscale_for_model(image.convert("RGB"), max_side=MAX_SIDE)
+        big, (bw, bh) = self._prep_input(image)
         out = []
         for i in range(variants):  # one at a time: batching overflows VRAM
             imgs = self._pipe(
@@ -60,5 +80,5 @@ class InstructPipeline:
                 num_images_per_prompt=1,
                 callback_on_step_end=self._cb(on_progress, i, variants),
             ).images
-            out.extend(imgs)
+            out.extend(img.crop((0, 0, bw, bh)) for img in imgs)
         return [i.convert("RGBA") for i in out]
