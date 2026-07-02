@@ -12,11 +12,26 @@ local D = {}
 
 -- Settings survive across reopenings of the panel.
 local last = { mode = "Generate", prompt = "", w = nil, h = nil,
-               strength = 60, variants = 4 }
+               strength = 60, variants = 4,
+               view = "Side view (right)", subject = "character",
+               instruction = "", symmetry = false }
 
 local MODE_KEY = { ["Generate"] = "generate",
                    ["Edit with AI"] = "edit",
-                   ["Inpaint Selection"] = "inpaint" }
+                   ["Inpaint Selection"] = "inpaint",
+                   ["Rotate / Instruct"] = "instruct" }
+
+local PRESETS = {  -- %s = the subject; smoke-tested: naming the subject
+                   -- explicitly is CRITICAL (generic "character" mutates it)
+  ["Side view (right)"] = "Show the same %s from the side, facing right",
+  ["Side view (left)"]  = "Show the same %s from the side, facing left",
+  ["Back view"]         = "Show the same %s from behind, seen from the back",
+  ["Front view"]        = "Show the same %s from the front, seen head-on",
+  ["3/4 view"]          = "Show the same %s from a three-quarter view",
+  ["Custom (text only)"] = "",
+}
+local PRESET_ORDER = { "Side view (right)", "Side view (left)", "Back view",
+                       "Front view", "3/4 view", "Custom (text only)" }
 
 local STATUS_W, STATUS_H = 380, 42
 
@@ -180,9 +195,15 @@ function D.open()
   -- neutral hint about what Run will do (red is reserved for real errors).
   local function applyModeVisibility()
     local m = dlg.data.mode
+    local instruct = m == "Rotate / Instruct"
     dlg:modify{ id = "w", visible = m == "Generate" }
     dlg:modify{ id = "h", visible = m == "Generate" }
     dlg:modify{ id = "strength", visible = m == "Edit with AI" }
+    dlg:modify{ id = "prompt", visible = not instruct }
+    dlg:modify{ id = "viewPreset", visible = instruct }
+    dlg:modify{ id = "subject", visible = instruct }
+    dlg:modify{ id = "instruction", visible = instruct }
+    dlg:modify{ id = "symmetry", visible = instruct }
     app.refresh()
     if state == "running" then return end
     local spr = app.sprite
@@ -191,6 +212,9 @@ function D.open()
                                      dlg.data.w, dlg.data.h))
     elseif m == "Edit with AI" then
       setState("idle", "Run will repaint the current sprite by your prompt.")
+    elseif instruct then
+      setState("idle",
+        "Run will redraw the sprite per the instruction (model swap ~30s).")
     else
       if not spr or spr.selection.isEmpty then
         setState("idle",
@@ -211,20 +235,52 @@ function D.open()
     last.strength = d.strength; last.variants = d.variants
 
     local mode = MODE_KEY[d.mode]
-    if d.prompt == "" then
-      setState("error", "Prompt is empty.")
-      return
-    end
-    local payload = { id = newId(), mode = mode, prompt = d.prompt,
+    local payload = { id = newId(), mode = mode,
                       variants = d.variants, frames = {} }
-    if mode == "generate" then
-      payload.target_size = { d.w, d.h }
-    else
+    if mode == "instruct" then
       local spr = app.sprite
       if not spr then
         setState("error", "Open a sprite first.")
         return
       end
+      local tpl = PRESETS[d.viewPreset] or ""
+      local subject = (d.subject ~= "" and d.subject) or "character"
+      local extra = d.instruction or ""
+      local instruction
+      if tpl == "" then
+        instruction = extra
+      else
+        instruction = string.format(tpl, subject)
+        if extra ~= "" then instruction = instruction .. ", " .. extra end
+      end
+      if instruction == "" then
+        setState("error", "Pick a view preset or type an instruction.")
+        return
+      end
+      last.view = d.viewPreset; last.subject = d.subject
+      last.instruction = extra; last.symmetry = d.symmetry
+      payload.prompt = instruction
+      payload.symmetry = d.symmetry
+      payload.target_size = { spr.width, spr.height }
+      payload.frames = { { image = exportFrame() } }
+    elseif mode == "generate" then
+      if d.prompt == "" then
+        setState("error", "Prompt is empty.")
+        return
+      end
+      payload.prompt = d.prompt
+      payload.target_size = { d.w, d.h }
+    else
+      if d.prompt == "" then
+        setState("error", "Prompt is empty.")
+        return
+      end
+      local spr = app.sprite
+      if not spr then
+        setState("error", "Open a sprite first.")
+        return
+      end
+      payload.prompt = d.prompt
       payload.target_size = { spr.width, spr.height }
       if mode == "edit" then
         payload.strength = d.strength / 100
@@ -243,9 +299,11 @@ function D.open()
     setState("running", "Contacting server...")
 
     job = client.request(payload, {
-      onprogress = function(v)
+      onprogress = function(v, stage)
         progress = v
-        if v < 0.85 then
+        if stage then
+          statusText = stage  -- e.g. "Loading klein model..." during a swap
+        elseif v < 0.85 then
           statusText = string.format("Generating... %d%%", math.floor(v * 100))
         elseif v < 0.95 then
           statusText = "Decoding images..."
@@ -278,9 +336,21 @@ function D.open()
   }
 
   dlg:combobox{ id = "mode", label = "Task:", option = last.mode,
-                options = { "Generate", "Edit with AI", "Inpaint Selection" },
+                options = { "Generate", "Edit with AI", "Inpaint Selection",
+                            "Rotate / Instruct" },
                 onchange = applyModeVisibility }
-  dlg:entry{ id = "prompt", label = "Prompt:", text = last.prompt }
+  dlg:entry{ id = "prompt", label = "Prompt:", text = last.prompt,
+             visible = last.mode ~= "Rotate / Instruct" }
+  dlg:combobox{ id = "viewPreset", label = "View:", option = last.view,
+                options = PRESET_ORDER,
+                visible = last.mode == "Rotate / Instruct" }
+  dlg:entry{ id = "subject", label = "Subject:", text = last.subject,
+             visible = last.mode == "Rotate / Instruct" }
+  dlg:entry{ id = "instruction", label = "Extra:", text = last.instruction,
+             visible = last.mode == "Rotate / Instruct" }
+  dlg:check{ id = "symmetry", text = "Mirror symmetry (front/back views)",
+             selected = last.symmetry,
+             visible = last.mode == "Rotate / Instruct" }
   local spr = app.sprite
   dlg:number{ id = "w", label = "Size:",
               text = tostring(last.w or (spr and spr.width) or 64),

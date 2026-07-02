@@ -26,7 +26,9 @@ function M.request(payload, callbacks)
           finish(); callbacks.onerror("bad server reply"); return
         end
         if msg.type == "progress" then
-          if callbacks.onprogress then callbacks.onprogress(msg.value) end
+          if callbacks.onprogress then
+            callbacks.onprogress(msg.value, msg.stage)
+          end
         elseif msg.type == "result" then
           finish(); callbacks.onresult(msg.images)
         elseif msg.type == "error" then
