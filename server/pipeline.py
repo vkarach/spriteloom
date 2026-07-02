@@ -32,13 +32,19 @@ class Pipeline:
                                AutoPipelineForInpainting)
         log.info("loading %s (first run downloads ~7 GB)...", MODEL_ID)
         vae = AutoencoderKL.from_pretrained(
-            VAE_ID, torch_dtype=torch.float16, cache_dir=self.models_dir)
+            VAE_ID, torch_dtype=torch.float16, cache_dir=self.models_dir,
+            low_cpu_mem_usage=True)
         self._txt2img = AutoPipelineForText2Image.from_pretrained(
             MODEL_ID, torch_dtype=torch.float16, variant="fp16", vae=vae,
-            cache_dir=self.models_dir).to("cuda")
+            cache_dir=self.models_dir, low_cpu_mem_usage=True).to("cuda")
         self._txt2img.load_lora_weights(LORA_ID, cache_dir=self.models_dir)
         self._img2img = AutoPipelineForImage2Image.from_pipe(self._txt2img)
         self._inpaint = AutoPipelineForInpainting.from_pipe(self._txt2img)
+        # Weights now live in VRAM; drop the CPU-side loading leftovers so
+        # the server does not sit on gigabytes of host RAM.
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
         log.info("pipeline ready")
 
     def _cb(self, on_progress, total):
