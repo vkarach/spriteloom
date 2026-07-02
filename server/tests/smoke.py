@@ -25,19 +25,31 @@ def main():
     ap.add_argument("--strength", type=float, default=0.6)
     ap.add_argument("--inpaint-mask", metavar="PNG",
                     help="with --edit: white-on-black mask -> inpaint mode")
+    ap.add_argument("--instruct", action="store_true",
+                    help="with --edit: treat prompt as an instruction (Klein)")
     args = ap.parse_args()
 
     out_dir = pathlib.Path("output")
     out_dir.mkdir(exist_ok=True)
-    pipe = Pipeline()
-    t0 = time.time()
-    pipe.load()
-    print(f"model loaded in {time.time() - t0:.1f}s", flush=True)
+    if not (args.instruct and args.edit):
+        pipe = Pipeline()
+        t0 = time.time()
+        pipe.load()
+        print(f"model loaded in {time.time() - t0:.1f}s", flush=True)
 
     from PIL import Image as PILImage
     progress = lambda v: print(f"\r{v:4.0%}", end="")
     t0 = time.time()
-    if args.edit and args.inpaint_mask:
+    if args.instruct and args.edit:
+        from server.instruct import InstructPipeline
+        ipipe = InstructPipeline()
+        t0 = time.time()
+        ipipe.load()
+        print(f"instruct model loaded in {time.time() - t0:.1f}s", flush=True)
+        src = PILImage.open(args.edit).convert("RGBA")
+        images = ipipe.edit_by_instruction(
+            args.prompt, src, variants=args.variants, on_progress=progress)
+    elif args.edit and args.inpaint_mask:
         src = PILImage.open(args.edit).convert("RGBA")
         mask = PILImage.open(args.inpaint_mask)
         images = pipe.inpaint(args.prompt, src, mask,

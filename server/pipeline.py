@@ -92,10 +92,10 @@ class Pipeline:
         return [i.convert("RGBA") for i in out]
 
 
-def upscale_for_model(img: Image.Image) -> Image.Image:
-    """Nearest-neighbor upscale so SDXL sees crisp pixels; dims % 8 == 0."""
+def upscale_for_model(img: Image.Image, max_side: int = 1024) -> Image.Image:
+    """Nearest-neighbor upscale so the model sees crisp pixels; dims % 8 == 0."""
     w, h = img.size
-    scale = 1024 / max(w, h)
+    scale = max_side / max(w, h)
     nw = max(8, round(w * scale / 8) * 8)
     nh = max(8, round(h * scale / 8) * 8)
     return img.resize((nw, nh), Image.NEAREST)
