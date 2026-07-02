@@ -30,6 +30,20 @@ function init(plugin)
     group = "spriteforge_menu",
     onclick = function() dialogs.generate() end,
   }
+
+  plugin:newCommand{
+    id = "SpriteForgeEdit",
+    title = "Edit with AI...",
+    group = "spriteforge_menu",
+    onclick = function() dialogs.edit() end,
+  }
+
+  plugin:newCommand{
+    id = "SpriteForgeInpaint",
+    title = "Inpaint Selection...",
+    group = "spriteforge_menu",
+    onclick = function() dialogs.inpaint() end,
+  }
 end
 
 function exit(plugin) end

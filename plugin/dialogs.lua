@@ -135,4 +135,73 @@ function D.generate()
   dlg:show{ wait = false }
 end
 
+-- Export current selection as a white-on-black mask PNG (base64).
+function D._exportMask()
+  local spr = app.sprite
+  local sel = spr.selection
+  if sel.isEmpty then return nil end
+  local img = Image(spr.width, spr.height)  -- RGBA, all transparent/black
+  for y = 0, spr.height - 1 do
+    for x = 0, spr.width - 1 do
+      if sel:contains(Point(x, y)) then
+        img:drawPixel(x, y, Color{ r = 255, g = 255, b = 255 })
+      else
+        img:drawPixel(x, y, Color{ r = 0, g = 0, b = 0 })
+      end
+    end
+  end
+  local p = tempPath("mask.png")
+  img:saveAs(p)
+  return b64.encode(readFile(p))
+end
+
+function D.edit()
+  if not app.sprite then app.alert("Open a sprite first.") return end
+  local spr = app.sprite
+  local dlg = Dialog("SpriteForge — Edit with AI")
+  dlg:entry{ id = "prompt", label = "Prompt:", focus = true }
+  dlg:slider{ id = "strength", label = "Strength %:", min = 20, max = 90,
+              value = 60 }
+  dlg:slider{ id = "variants", label = "Variants:", min = 1, max = 8, value = 4 }
+  dlg:button{ text = "Generate", onclick = function()
+    local d = dlg.data
+    dlg:close()
+    if d.prompt == "" then app.alert("Prompt is empty.") return end
+    D._runJob{
+      id = newId(), mode = "edit", prompt = d.prompt,
+      target_size = { spr.width, spr.height },
+      variants = d.variants, strength = d.strength / 100,
+      frames = { { image = D._exportFrame() } },
+    }
+  end }
+  dlg:button{ text = "Cancel" }
+  dlg:show{ wait = false }
+end
+
+function D.inpaint()
+  if not app.sprite then app.alert("Open a sprite first.") return end
+  local spr = app.sprite
+  if spr.selection.isEmpty then
+    app.alert("Select the region to redraw first (rectangle/lasso).")
+    return
+  end
+  local dlg = Dialog("SpriteForge — Inpaint Selection")
+  dlg:entry{ id = "prompt", label = "Prompt:", focus = true }
+  dlg:slider{ id = "variants", label = "Variants:", min = 1, max = 8, value = 4 }
+  dlg:button{ text = "Generate", onclick = function()
+    local d = dlg.data
+    local mask = D._exportMask()
+    dlg:close()
+    if not mask then app.alert("Selection was lost - select the region again.") return end
+    if d.prompt == "" then app.alert("Prompt is empty.") return end
+    D._runJob{
+      id = newId(), mode = "inpaint", prompt = d.prompt,
+      target_size = { spr.width, spr.height }, variants = d.variants,
+      frames = { { image = D._exportFrame(), mask = mask } },
+    }
+  end }
+  dlg:button{ text = "Cancel" }
+  dlg:show{ wait = false }
+end
+
 return D
