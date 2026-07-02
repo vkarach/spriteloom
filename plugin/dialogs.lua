@@ -64,7 +64,7 @@ function D._previewGrid(imagesB64, payload)
   local scale = math.max(1, math.floor(192 / math.max(iw, ih)))
   local cw, ch = iw * scale + 8, ih * scale + 8
 
-  local dlg = Dialog("SpriteForge — pick a variant (click)")
+  local dlg = Dialog("SpriteForge - pick a variant (click)")
   dlg:canvas{
     id = "grid", width = cols * cw, height = rows * ch,
     onpaint = function(ev)
@@ -98,9 +98,10 @@ end
 
 -- Progress dialog + request lifecycle shared by all modes.
 function D._runJob(payload)
-  local dlg = Dialog("SpriteForge — generating...")
+  local dlg = Dialog("SpriteForge - generating...")
   local job
-  dlg:label{ id = "status", text = "Contacting server...      " }
+  -- Padded so the dialog is wide enough for the longest status text.
+  dlg:label{ id = "status", text = "Contacting server...                    " }
   dlg:button{ text = "Cancel", onclick = function()
     if job then job.cancel() end
     dlg:close()
@@ -133,7 +134,7 @@ end
 function D.generate()
   if not app.sprite then app.alert("Open a sprite first.") return end
   local spr = app.sprite
-  local dlg = Dialog("SpriteForge — Generate")
+  local dlg = Dialog("SpriteForge - Generate")
   dlg:entry{ id = "prompt", label = "Prompt:", focus = true }
   dlg:number{ id = "w", label = "Size:", text = tostring(spr.width) }
   dlg:number{ id = "h", text = tostring(spr.height) }
@@ -174,7 +175,7 @@ end
 function D.edit()
   if not app.sprite then app.alert("Open a sprite first.") return end
   local spr = app.sprite
-  local dlg = Dialog("SpriteForge — Edit with AI")
+  local dlg = Dialog("SpriteForge - Edit with AI")
   dlg:entry{ id = "prompt", label = "Prompt:", focus = true }
   dlg:slider{ id = "strength", label = "Strength %:", min = 20, max = 90,
               value = 60 }
@@ -201,7 +202,7 @@ function D.inpaint()
     app.alert("Select the region to redraw first (rectangle/lasso).")
     return
   end
-  local dlg = Dialog("SpriteForge — Inpaint Selection")
+  local dlg = Dialog("SpriteForge - Inpaint Selection")
   dlg:entry{ id = "prompt", label = "Prompt:", focus = true }
   dlg:slider{ id = "variants", label = "Variants:", min = 1, max = 8, value = 4 }
   dlg:button{ text = "Generate", onclick = function()
