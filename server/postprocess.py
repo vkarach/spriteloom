@@ -1,7 +1,7 @@
 """Turn AI output into actual pixel art: downscale, palette, transparency."""
 import numpy as np
 from PIL import Image
-from collections import deque
+from scipy import ndimage
 
 
 def downscale(img: Image.Image, target_size: tuple[int, int],
@@ -125,27 +125,11 @@ def remove_background(img: Image.Image, tolerance: int = 12) -> Image.Image:
         return img.convert("RGBA")  # no uniform background detected
     bg = corners.mean(axis=0)
 
-    def is_bg(y, x):
-        return np.abs(arr[y, x, :3] - bg).max() <= tolerance
-
-    seen = np.zeros((h, w), dtype=bool)
-    queue = deque()
-    for x in range(w):
-        for y in (0, h - 1):
-            if is_bg(y, x) and not seen[y, x]:
-                seen[y, x] = True
-                queue.append((y, x))
-    for y in range(h):
-        for x in (0, w - 1):
-            if is_bg(y, x) and not seen[y, x]:
-                seen[y, x] = True
-                queue.append((y, x))
-    while queue:
-        y, x = queue.popleft()
-        arr[y, x, 3] = 0
-        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            ny, nx = y + dy, x + dx
-            if 0 <= ny < h and 0 <= nx < w and not seen[ny, nx] and is_bg(ny, nx):
-                seen[ny, nx] = True
-                queue.append((ny, nx))
+    bgmask = np.abs(arr[:, :, :3] - bg).max(axis=2) <= tolerance
+    seed = np.zeros((h, w), dtype=bool)
+    seed[0, :], seed[-1, :] = bgmask[0, :], bgmask[-1, :]
+    seed[:, 0], seed[:, -1] = bgmask[:, 0], bgmask[:, -1]
+    cross = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
+    cleared = ndimage.binary_propagation(seed, mask=bgmask, structure=cross)
+    arr[cleared, 3] = 0
     return Image.fromarray(arr.astype(np.uint8), "RGBA")

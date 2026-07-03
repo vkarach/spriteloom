@@ -156,3 +156,65 @@ def test_remove_background_keeps_inner_holes():
     out = remove_background(img)
     assert out.getpixel((0, 0))[3] == 0
     assert out.getpixel((2, 2))[3] == 255  # enclosed, not reached by flood
+
+
+def _reference_remove_bg(img, tolerance=12):
+    """Original per-pixel BFS flood, kept only to pin the vectorized version."""
+    import numpy as np
+    from collections import deque
+    arr = np.asarray(img.convert("RGBA")).astype(int).copy()
+    h, w = arr.shape[:2]
+    corners = np.array([arr[0, 0, :3], arr[0, w - 1, :3],
+                        arr[h - 1, 0, :3], arr[h - 1, w - 1, :3]])
+    if corners.std(axis=0).max() > tolerance:
+        return img.convert("RGBA")
+    bg = corners.mean(axis=0)
+
+    def is_bg(y, x):
+        return np.abs(arr[y, x, :3] - bg).max() <= tolerance
+
+    seen = np.zeros((h, w), dtype=bool)
+    queue = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            if is_bg(y, x) and not seen[y, x]:
+                seen[y, x] = True
+                queue.append((y, x))
+    for y in range(h):
+        for x in (0, w - 1):
+            if is_bg(y, x) and not seen[y, x]:
+                seen[y, x] = True
+                queue.append((y, x))
+    while queue:
+        y, x = queue.popleft()
+        arr[y, x, 3] = 0
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < h and 0 <= nx < w and not seen[ny, nx] \
+                    and is_bg(ny, nx):
+                seen[ny, nx] = True
+                queue.append((ny, nx))
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+
+def test_remove_background_matches_reference_flood():
+    import numpy as np
+    # Concave-background + enclosed pocket: a red C-shape on white so the
+    # flood must wrap around, plus a white pocket sealed inside the arms.
+    img = Image.new("RGBA", (9, 9), (255, 255, 255, 255))
+    red = (255, 0, 0, 255)
+    for x in range(2, 7):
+        img.putpixel((x, 2), red)
+        img.putpixel((x, 6), red)
+    for y in range(2, 7):
+        img.putpixel((2, y), red)
+    for y in range(3, 6):        # right side open (the C mouth)
+        img.putpixel((6, y), red) if y == 4 else None
+    for x in range(3, 6):        # seal an inner white pocket
+        img.putpixel((x, 3), red)
+        img.putpixel((x, 5), red)
+    img.putpixel((3, 4), red)
+    img.putpixel((5, 4), red)
+    ref = np.asarray(_reference_remove_bg(img, 12))
+    got = np.asarray(remove_background(img, 12))
+    assert np.array_equal(got, ref)
