@@ -1,12 +1,9 @@
 # TODO
 
-- Generate's "Preparing prompt" phase (~20 s) dwarfs the 3 s of diffusion:
-  CPU offload streams the text encoder + transformer to the GPU on every
-  call. Investigate pinning the text encoder in VRAM (or quantizing only
-  it) so repeat generations skip most of the streaming.
-- One Klein pipeline instead of two: if bf16+offload handles editing at
-  acceptable speed (with batched variants), the 8-bit edit pipeline and
-  the klein/klein_t2i model swap disappear.
+- One Klein pipeline instead of two: the t2i config (8-bit text encoder +
+  bf16 transformer, fully resident, ~11.5 GB) can likely serve editing
+  too - then the 8-bit edit pipeline and the klein/klein_t2i model swap
+  disappear, and edit quality may improve (bf16 transformer).
 
 - Edit / Inpaint still run on SDXL: consider Klein image-to-image for
   detailed edit prompts once its editing quality at low strength is tested.

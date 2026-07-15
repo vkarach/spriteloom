@@ -35,7 +35,7 @@ on its first use; switching between tasks that need different models takes
    **View** preset, name the **Subject** ("closed book with dark brown
    leather cover"), add **Extra** details if needed — the panel shows the
    exact text it will send. "Custom (text only)" sends your subject text
-   as-is. Needs ~16 GB of system RAM while generating (CPU offload).
+   as-is.
 4. The **Background** option controls transparency: Auto detects and strips
    a uniform background, Remove strips the dominant border color even when
    detection is unsure, Keep leaves the image fully opaque.

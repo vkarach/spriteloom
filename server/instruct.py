@@ -122,7 +122,10 @@ def t2i_size(target_size: tuple[int, int],
 
 
 class KleinT2I:
-    """Klein text-to-image, bf16 + CPU offload (8-bit t2i outputs noise)."""
+    """Klein text-to-image, fully VRAM-resident: 8-bit text encoder + bf16
+    transformer (~11.5 GB). Quantizing the TRANSFORMER breaks t2i (pure
+    noise), but the text encoder takes 8-bit fine - and with both resident
+    there is no per-call offload streaming (was ~20 s per generation)."""
 
     def __init__(self, models_dir: str = "models"):
         self.models_dir = models_dir
@@ -134,10 +137,25 @@ class KleinT2I:
         import gc
         import torch
         from diffusers import Flux2KleinPipeline
-        log.info("loading %s for t2i (bf16, cpu offload)...", MODEL_ID)
-        self._pipe = Flux2KleinPipeline.from_pretrained(
-            MODEL_ID, torch_dtype=torch.bfloat16, cache_dir=self.models_dir)
-        self._pipe.enable_model_cpu_offload()
+        log.info("loading %s for t2i...", MODEL_ID)
+        try:
+            from diffusers import PipelineQuantizationConfig
+            quant = PipelineQuantizationConfig(
+                quant_backend="bitsandbytes_8bit",
+                quant_kwargs={"load_in_8bit": True},
+                components_to_quantize=["text_encoder"],
+            )
+            self._pipe = Flux2KleinPipeline.from_pretrained(
+                MODEL_ID, torch_dtype=torch.bfloat16,
+                cache_dir=self.models_dir,
+                quantization_config=quant).to("cuda")
+        except Exception:
+            log.exception("resident load failed; falling back to CPU "
+                          "offload (slower, ~16 GB of system RAM)")
+            self._pipe = Flux2KleinPipeline.from_pretrained(
+                MODEL_ID, torch_dtype=torch.bfloat16,
+                cache_dir=self.models_dir)
+            self._pipe.enable_model_cpu_offload()
         self._pipe.vae.enable_slicing()
         gc.collect()
         torch.cuda.empty_cache()
@@ -156,8 +174,7 @@ class KleinT2I:
         self.load()
         w, h = t2i_size(target_size)
         out = []
-        # Batched: one prompt encode + one weight stream-in per chunk instead
-        # of per variant (~4x faster). 4 x 512px peaks at ~8 GB VRAM.
+        # Batched in chunks of 4: peaks ~12 GB VRAM with resident weights.
         while len(out) < variants:
             chunk = min(4, variants - len(out))
             out += self._pipe(
