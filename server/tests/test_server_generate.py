@@ -7,7 +7,7 @@ from PIL import Image
 
 import numpy as np
 import server.main as srv
-from server.protocol import image_to_b64, image_from_b64
+from server.protocol import image_to_b64, image_from_raw
 
 HOST, PORT = "127.0.0.1", 8798
 
@@ -145,7 +145,7 @@ def test_generate_background_keep_stays_opaque(server_thread):
                     return msg
     msg = asyncio.run(go())
     assert msg["type"] == "result"
-    final = image_from_b64(msg["images"][0])
+    final = image_from_raw(msg["images"][0])
     assert (np.asarray(final)[:, :, 3] == 255).all()
 
 
@@ -180,7 +180,7 @@ def test_edit_crops_small_subject_to_fill_frame(server_thread):
 
     msg = asyncio.run(go())
     assert msg["type"] == "result"
-    final = image_from_b64(msg["images"][0])
+    final = image_from_raw(msg["images"][0])
     opaque = int((np.asarray(final)[:, :, 3] > 0).sum())
     # Cropped fills most of 64x64; uncropped would be under 100 px of 4096.
     assert opaque > 1500, f"subject collapsed: only {opaque}/4096 opaque px"
@@ -206,7 +206,7 @@ def test_history_pages_newest_first(server_thread, monkeypatch, tmp_path):
     assert msg["type"] == "history" and msg["total"] == 2
     assert msg["runs"][0]["prompt"] == "new book"  # newest first
     assert msg["runs"][0]["count"] == 1
-    img = image_from_b64(msg["runs"][0]["images"][0])
+    img = image_from_raw(msg["runs"][0]["images"][0])
     assert img.size == (8, 8)
 
     msg = asyncio.run(go({"type": "history", "offset": 0, "limit": 5,

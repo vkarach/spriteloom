@@ -55,7 +55,8 @@ def _save_debug(req, raw_images, final_images):
 def _history_msg(offset, limit, preview=False):
     """Page of past runs, newest first: folder names sort by timestamp.
     preview=True sends only the first image of each run (list thumbnails)."""
-    import base64
+    from PIL import Image
+    from server.protocol import image_to_raw
     folders = sorted((p for p in DEBUG_DIR.iterdir() if p.is_dir()),
                      key=lambda p: p.name, reverse=True) \
         if DEBUG_DIR.exists() else []
@@ -67,7 +68,7 @@ def _history_msg(offset, limit, preview=False):
         except (OSError, json.JSONDecodeError):
             meta = {}
         files = sorted(folder.glob("final_*.png"))
-        images = [base64.b64encode(f.read_bytes()).decode("ascii")
+        images = [image_to_raw(Image.open(f))
                   for f in (files[:1] if preview else files)]
         if images:
             # offset = absolute folder index: runs without images are

@@ -104,6 +104,10 @@ def test_response_builders():
         "id": "r1", "type": "progress", "value": 0.5}
     res = json.loads(result_msg("r1", [_red_16()]))
     assert res["type"] == "result" and len(res["images"]) == 1
+    from server.protocol import image_from_raw
+    img = image_from_raw(res["images"][0])
+    assert img.size == (16, 16)
+    assert img.getpixel((0, 0)) == (255, 0, 0, 255)
     err = json.loads(error_msg("r1", "boom"))
     assert err == {"id": "r1", "type": "error", "message": "boom"}
 

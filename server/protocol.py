@@ -39,6 +39,20 @@ def image_to_b64(img: Image.Image) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def image_to_raw(img: Image.Image) -> dict:
+    """RGBA pixel bytes, not PNG: the plugin turns this into an Image in
+    memory (Image.bytes) - loading a PNG via a temp file spams Aseprite's
+    Recent Files list."""
+    rgba = img.convert("RGBA")
+    return {"w": rgba.width, "h": rgba.height,
+            "px": base64.b64encode(rgba.tobytes()).decode("ascii")}
+
+
+def image_from_raw(d: dict) -> Image.Image:
+    return Image.frombytes("RGBA", (int(d["w"]), int(d["h"])),
+                           base64.b64decode(d["px"]))
+
+
 def image_from_b64(s: str) -> Image.Image:
     try:
         return Image.open(io.BytesIO(base64.b64decode(s))).convert("RGBA")
@@ -102,7 +116,7 @@ def progress_msg(req_id: str, value: float, stage: str | None = None) -> str:
 def result_msg(req_id: str, images: list[Image.Image]) -> str:
     return json.dumps({
         "id": req_id, "type": "result",
-        "images": [image_to_b64(i) for i in images],
+        "images": [image_to_raw(i) for i in images],
     })
 
 

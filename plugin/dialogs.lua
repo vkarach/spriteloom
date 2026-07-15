@@ -143,10 +143,17 @@ local function exportMask()
   return b64.encode(readFile(p))
 end
 
-local function imageFromB64(s, n)
-  local p = tempPath("variant" .. n .. ".png")
-  writeFile(p, b64.decode(s))
-  return Image{ fromFile = p }
+-- Server images arrive as raw RGBA bytes and become an in-memory Image.
+-- No temp PNG + Image{fromFile}: that spammed Aseprite's Recent Files.
+local function imageFromPayload(spec, n)
+  if type(spec) == "string" then  -- older server still sends PNG base64
+    local p = tempPath("variant" .. n .. ".png")
+    writeFile(p, b64.decode(spec))
+    return Image{ fromFile = p }
+  end
+  local img = Image(spec.w, spec.h, ColorMode.RGB)
+  img.bytes = b64.decode(spec.px)
+  return img
 end
 
 local function insertAsLayer(img, name)
@@ -281,7 +288,7 @@ local function showRun(offset)
     run = msg.runs[1]
     if run then
       for n, s in ipairs(run.images) do
-        imgs[n] = imageFromB64(s, "h" .. n)
+        imgs[n] = imageFromPayload(s, "h" .. n)
       end
       status = nil
     else
@@ -416,7 +423,7 @@ showHistory = function()
         gc.color = shade(face, (v % 2 == 0) and 0.97 or 0.93)
         gc:fillRect(Rectangle(0, y, LISTW, ROWH))
         -- thumbnail on a checkerboard
-        thumbs[i] = thumbs[i] or imageFromB64(run.images[1], "t" .. i)
+        thumbs[i] = thumbs[i] or imageFromPayload(run.images[1], "t" .. i)
         local img = thumbs[i]
         local box = ROWH - 8
         local s = math.min(box / img.width, box / img.height)
@@ -686,7 +693,7 @@ function D.open()
       end,
       onresult = function(images)
         local imgs = {}
-        for n, s in ipairs(images) do imgs[n] = imageFromB64(s, n) end
+        for n, s in ipairs(images) do imgs[n] = imageFromPayload(s, n) end
         setState("done", string.format(
           "%d variants ready. Press Run for more.", #imgs))
         showResults(imgs, function(n, added)
