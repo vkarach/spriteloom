@@ -377,30 +377,59 @@ local function showRun(offset)
   app.refresh()
 end
 
--- History window: scrollable list of past runs (newest first) with
--- thumbnails; mouse wheel scrolls, click opens the run.
+local histMode = "list"  -- "list" | "grid"; kept across reopenings
+
+-- History window: scrollable past runs (newest first); mouse wheel
+-- scrolls, click opens the run. Two layouts: rows with description or
+-- a plain 3-column grid of previews.
 showHistory = function()
   local rows = nil          -- {name, mode, prompt, count, images={b64}}
-  local thumbs = {}         -- decoded lazily per visible row
-  local scroll = 0
+  local thumbs = {}         -- all decoded once on arrival: scroll stays free
+  local scroll = 0          -- list rows or grid rows, depending on mode
   local status = "Loading history..."
   local ROWH, LISTW, VIS = 56, 600, 7
   local LISTH = ROWH * VIS
+  local COLS, GW, GH, GVIS = 3, LISTW // 3, 130, 3
 
   local dlg = Dialog("SpriteForge - History (scroll, click a run)")
 
   local function maxScroll()
-    return rows and math.max(0, #rows - VIS) or 0
+    if not rows then return 0 end
+    if histMode == "grid" then
+      return math.max(0, math.ceil(#rows / COLS) - GVIS)
+    end
+    return math.max(0, #rows - VIS)
   end
 
   client.history(0, 500, true, function(msg)
     rows = msg.runs
+    for i, run in ipairs(rows) do
+      thumbs[i] = imageFromPayload(run.images[1], "t" .. i)
+    end
     status = (#rows == 0) and "History is empty." or nil
     dlg:repaint()
   end, function(err)
     status = err
     dlg:repaint()
   end)
+
+  local function drawThumb(gc, img, bx, by, bw, bh)
+    local s = math.min(bw / img.width, bh / img.height)
+    local dw = math.max(1, math.floor(img.width * s))
+    local dh = math.max(1, math.floor(img.height * s))
+    local dx, dy = bx + (bw - dw) // 2, by + (bh - dh) // 2
+    for qy = 0, dh - 1, 8 do
+      for qx = 0, dw - 1, 8 do
+        gc.color = ((qx + qy) // 8) % 2 == 0
+          and Color{ r = 190, g = 190, b = 190 }
+          or Color{ r = 150, g = 150, b = 150 }
+        gc:fillRect(Rectangle(dx + qx, dy + qy,
+          math.min(8, dw - qx), math.min(8, dh - qy)))
+      end
+    end
+    gc:drawImage(img, Rectangle(0, 0, img.width, img.height),
+                 Rectangle(dx, dy, dw, dh))
+  end
 
   dlg:canvas{
     id = "hlist", width = LISTW, height = LISTH,
@@ -415,51 +444,50 @@ showHistory = function()
         gc:fillText(status, 8, 8)
         return
       end
-      for v = 1, VIS do
-        local i = scroll + v
-        local run = rows[i]
-        if not run then break end
-        local y = (v - 1) * ROWH
-        gc.color = shade(face, (v % 2 == 0) and 0.97 or 0.93)
-        gc:fillRect(Rectangle(0, y, LISTW, ROWH))
-        -- thumbnail on a checkerboard
-        thumbs[i] = thumbs[i] or imageFromPayload(run.images[1], "t" .. i)
-        local img = thumbs[i]
-        local box = ROWH - 8
-        local s = math.min(box / img.width, box / img.height)
-        local dw = math.max(1, math.floor(img.width * s))
-        local dh = math.max(1, math.floor(img.height * s))
-        local dx, dy = 4 + (box - dw) // 2, y + 4 + (box - dh) // 2
-        for qy = 0, dh - 1, 8 do
-          for qx = 0, dw - 1, 8 do
-            gc.color = ((qx + qy) // 8) % 2 == 0
-              and Color{ r = 190, g = 190, b = 190 }
-              or Color{ r = 150, g = 150, b = 150 }
-            gc:fillRect(Rectangle(dx + qx, dy + qy,
-              math.min(8, dw - qx), math.min(8, dh - qy)))
+      if histMode == "grid" then
+        for v = 0, GVIS - 1 do
+          for c = 0, COLS - 1 do
+            local i = (scroll + v) * COLS + c + 1
+            local run = rows[i]
+            if run then
+              local x, y = c * GW, v * GH
+              gc.color = shade(face, ((v + c) % 2 == 0) and 0.93 or 0.97)
+              gc:fillRect(Rectangle(x, y, GW, GH))
+              drawThumb(gc, thumbs[i], x + 4, y + 4, GW - 8, GH - 8)
+            end
           end
         end
-        gc:drawImage(img, Rectangle(0, 0, img.width, img.height),
-                     Rectangle(dx, dy, dw, dh))
-        -- two text lines: prompt, then mode/date/variant count
-        local prompt = run.prompt
-        if #prompt > 80 then prompt = prompt:sub(1, 80) .. "..." end
-        gc.color = text
-        gc:fillText(prompt, ROWH + 6, y + 10)
-        local y4, mo, dd, hh, mi = run.name:match(
-          "^(%d%d%d%d)(%d%d)(%d%d)%-(%d%d)(%d%d)")
-        local when = y4 and string.format("%s-%s-%s %s:%s",
-                                          y4, mo, dd, hh, mi) or ""
-        gc.color = shade(text, 0.65)
-        local count = run.count or #run.images  -- older server: no count
-        gc:fillText(string.format("%s   %s   %d variant%s", run.mode, when,
-                                  count, count == 1 and "" or "s"),
-                    ROWH + 6, y + 28)
+      else
+        for v = 1, VIS do
+          local i = scroll + v
+          local run = rows[i]
+          if not run then break end
+          local y = (v - 1) * ROWH
+          gc.color = shade(face, (v % 2 == 0) and 0.97 or 0.93)
+          gc:fillRect(Rectangle(0, y, LISTW, ROWH))
+          drawThumb(gc, thumbs[i], 4, y + 4, ROWH - 8, ROWH - 8)
+          local prompt = run.prompt
+          if #prompt > 80 then prompt = prompt:sub(1, 80) .. "..." end
+          gc.color = text
+          gc:fillText(prompt, ROWH + 6, y + 10)
+          local y4, mo, dd, hh, mi = run.name:match(
+            "^(%d%d%d%d)(%d%d)(%d%d)%-(%d%d)(%d%d)")
+          local when = y4 and string.format("%s-%s-%s %s:%s",
+                                            y4, mo, dd, hh, mi) or ""
+          gc.color = shade(text, 0.65)
+          local count = run.count or #run.images
+          gc:fillText(string.format("%s   %s   %d variant%s", run.mode, when,
+                                    count, count == 1 and "" or "s"),
+                      ROWH + 6, y + 28)
+        end
       end
       -- scrollbar
-      if #rows > VIS then
-        local barH = math.max(16, math.floor(LISTH * VIS / #rows))
-        local barY = math.floor((LISTH - barH) * scroll / maxScroll())
+      local ms = maxScroll()
+      if ms > 0 then
+        local vis = (histMode == "grid") and GVIS or VIS
+        local totalRows = vis + ms
+        local barH = math.max(16, math.floor(LISTH * vis / totalRows))
+        local barY = math.floor((LISTH - barH) * scroll / ms)
         gc.color = shade(face, 0.80)
         gc:fillRect(Rectangle(LISTW - 5, 0, 5, LISTH))
         gc.color = shade(face, 0.55)
@@ -468,7 +496,8 @@ showHistory = function()
     end,
     onwheel = function(ev)
       if not rows then return end
-      local step = (ev.deltaY > 0) and 2 or -2
+      local unit = (histMode == "grid") and 1 or 2
+      local step = (ev.deltaY > 0) and unit or -unit
       local s = math.max(0, math.min(maxScroll(), scroll + step))
       if s ~= scroll then
         scroll = s
@@ -477,13 +506,29 @@ showHistory = function()
     end,
     onmouseup = function(ev)
       if not rows then return end
-      local i = scroll + math.floor(ev.y / ROWH) + 1
+      local i
+      if histMode == "grid" then
+        local c = math.floor(ev.x / GW)
+        if c >= COLS then return end
+        i = (scroll + math.floor(ev.y / GH)) * COLS + c + 1
+      else
+        i = scroll + math.floor(ev.y / ROWH) + 1
+      end
       if rows[i] then
         dlg:close()
         showRun(rows[i].offset or (i - 1))  -- older server: no offset field
       end
     end,
   }
+  dlg:button{ id = "viewmode",
+              text = (histMode == "list") and "Grid view" or "List view",
+              onclick = function()
+    histMode = (histMode == "list") and "grid" or "list"
+    scroll = 0
+    dlg:modify{ id = "viewmode",
+                text = (histMode == "list") and "Grid view" or "List view" }
+    dlg:repaint()
+  end }
   dlg:button{ text = "Close" }
   dlg:show{ wait = true }
   app.refresh()
