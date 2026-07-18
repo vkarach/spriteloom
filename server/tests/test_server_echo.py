@@ -34,6 +34,7 @@ def test_ping_pong(server_thread):
     msg = asyncio.run(go())
     assert msg["type"] == "pong"
     assert msg["model"] == "loading"  # nothing resident in this fixture
+    assert msg["progress"] == 0.0     # no load in flight yet
 
 
 def test_bad_request_returns_error(server_thread):

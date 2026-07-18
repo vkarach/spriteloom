@@ -574,8 +574,12 @@ function D.open()
   local progress = 0
   local job = nil
   local serverStatus = "checking"  -- checking | online | warming | offline
+  local loadProgress = 0    -- 0..1 model load fraction while warming
   local pingBusy = false
+  local pingAt = 0          -- watchdog: never let a lost ping jam the loop
   local pingTimer
+  local pingInterval = 10.0
+  local updateHint, retunePing  -- forward: checkServer uses both
   local sizeTimer
   local animTimer   -- drives the busy animation only while running
   local baseW, baseH  -- nil = re-capture on next guard tick
@@ -585,16 +589,39 @@ function D.open()
   local function repaint() dlg:repaint() end
 
   local function checkServer()
-    if pingBusy then return end
+    if pingBusy and os.clock() - pingAt < 8 then return end
     pingBusy = true
+    pingAt = os.clock()
     client.ping(
-      function(model)
+      function(model, progress)
         pingBusy = false
         -- server preloads Klein at startup; show it until the model is in
         serverStatus = (model == "loading") and "warming" or "online"
+        loadProgress = progress or 0
+        -- a stale "Server offline" error must clear once the server answers
+        if state == "error" and statusText:find("offline") then
+          updateHint()
+        end
+        retunePing()
         repaint()
       end,
-      function() pingBusy = false; serverStatus = "offline"; repaint() end)
+      function()
+        pingBusy = false
+        serverStatus = "offline"
+        retunePing()
+        repaint()
+      end)
+  end
+
+  -- Warming wants a lively bar (1s pings); otherwise 10s is plenty.
+  function retunePing()
+    if not Timer or not pingTimer then return end
+    local want = (serverStatus == "warming") and 1.0 or 10.0
+    if pingInterval == want then return end
+    pingInterval = want
+    pingTimer:stop()
+    pingTimer = Timer{ interval = want, ontick = checkServer }
+    pingTimer:start()
   end
 
   local function setState(s, text)
@@ -661,7 +688,7 @@ function D.open()
 
   local lastReqSig = nil
 
-  local function updateHint()
+  function updateHint()  -- assigns the forward-declared local
     if state == "running" then return end
     local reqs = requirements()
     lastReqSig = reqSignature(reqs)
@@ -885,9 +912,9 @@ function D.open()
       end
       gc:fillText(line, 8, 6)
       local srv = { online = { Color{ r = 106, g = 160, b = 100 }, "online" },
-                    warming = { Color{ r = 160, g = 140, b = 80 }, "loading" },
+                    warming = { Color{ r = 212, g = 180, b = 74 }, "loading" },
                     offline = { Color{ r = 168, g = 82, b = 62 }, "offline" },
-                    checking = { Color{ r = 160, g = 140, b = 80 }, "..." } }
+                    checking = { Color{ r = 212, g = 180, b = 74 }, "..." } }
       local dot, word = srv[serverStatus][1], srv[serverStatus][2]
       local wordW = 6 * #word
       local ok, size = pcall(function() return gc:measureText(word) end)
@@ -917,6 +944,23 @@ function D.open()
           local x = bx + 1 + math.floor((bw - 2 - seg) * tri)
           gc:fillRect(Rectangle(x, by + 1, seg, bh - 2))
         end
+      elseif serverStatus == "warming" then
+        -- Model load bar: same style as the run bar, fed by ping progress.
+        local bx, by, bw, bh = 8, 22, STATUS_W - 16, 10
+        gc.color = shade(face, 0.85)
+        gc:fillRect(Rectangle(bx, by, bw, bh))
+        if loadProgress > 0 then
+          gc.color = shade(face, 0.55)
+          gc:fillRect(Rectangle(bx + 1, by + 1,
+                                math.floor((bw - 2) * loadProgress), bh - 2))
+        end
+        gc.color = shade(themeColor("text", Color{ r = 40, g = 40, b = 40 }),
+                         0.75)
+        local label = (loadProgress > 0)
+          and string.format("Loading Klein model  %d%%",
+                            math.floor(loadProgress * 100))
+          or "Loading Klein model..."
+        gc:fillText(label, bx, 38)
       else
         -- Checklist drawn as a tree hanging off the status line.
         local textCol = themeColor("text", Color{ r = 40, g = 40, b = 40 })

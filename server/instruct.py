@@ -5,6 +5,7 @@ transformer. Quantizing the TRANSFORMER breaks t2i (pure noise); the text
 encoder takes 8-bit fine, and the bf16 transformer also edits faster than
 the 8-bit one did.
 """
+import contextlib
 import logging
 
 from PIL import Image
@@ -33,6 +34,50 @@ def t2i_size(target_size: tuple[int, int],
             max(16, round(h * scale / 16) * 16))
 
 
+@contextlib.contextmanager
+def _report_tqdm(report):
+    """Mirror the nested tqdm bars of from_pretrained (pipeline components,
+    checkpoint shards) into one 0..1 fraction. diffusers/transformers resolve
+    tqdm at call time, so swapping the class catches their bars."""
+    import tqdm as tqdm_lib
+    import tqdm.auto as tqdm_auto
+    real = tqdm_lib.tqdm
+    stack = []  # active bars, outermost first
+
+    def overall():
+        f, w = 0.0, 1.0
+        for bar in stack:
+            t = getattr(bar, "total", None) or 0
+            if t <= 0:
+                continue
+            f += w * min(bar.n / t, 1.0)
+            w /= t
+        return min(f, 1.0)
+
+    class Mirror(real):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            stack.append(self)
+
+        def update(self, n=1):
+            out = super().update(n)
+            report(overall())
+            return out
+
+        def close(self):
+            if self in stack:
+                stack.remove(self)
+            super().close()
+
+    tqdm_lib.tqdm = Mirror
+    tqdm_auto.tqdm = Mirror
+    try:
+        yield
+    finally:
+        tqdm_lib.tqdm = real
+        tqdm_auto.tqdm = real
+
+
 class KleinPipeline:
     def __init__(self, models_dir: str = "models"):
         self.models_dir = models_dir
@@ -44,25 +89,27 @@ class KleinPipeline:
         import gc
         import torch
         from diffusers import Flux2KleinPipeline
+        from server import models
         log.info("loading %s (first run downloads ~15 GB)...", MODEL_ID)
-        try:
-            from diffusers import PipelineQuantizationConfig
-            quant = PipelineQuantizationConfig(
-                quant_backend="bitsandbytes_8bit",
-                quant_kwargs={"load_in_8bit": True},
-                components_to_quantize=["text_encoder"],
-            )
-            self._pipe = Flux2KleinPipeline.from_pretrained(
-                MODEL_ID, torch_dtype=torch.bfloat16,
-                cache_dir=self.models_dir,
-                quantization_config=quant).to("cuda")
-        except Exception:
-            log.exception("resident load failed; falling back to CPU "
-                          "offload (slower, ~16 GB of system RAM)")
-            self._pipe = Flux2KleinPipeline.from_pretrained(
-                MODEL_ID, torch_dtype=torch.bfloat16,
-                cache_dir=self.models_dir)
-            self._pipe.enable_model_cpu_offload()
+        with _report_tqdm(models.set_load_progress):
+            try:
+                from diffusers import PipelineQuantizationConfig
+                quant = PipelineQuantizationConfig(
+                    quant_backend="bitsandbytes_8bit",
+                    quant_kwargs={"load_in_8bit": True},
+                    components_to_quantize=["text_encoder"],
+                )
+                self._pipe = Flux2KleinPipeline.from_pretrained(
+                    MODEL_ID, torch_dtype=torch.bfloat16,
+                    cache_dir=self.models_dir,
+                    quantization_config=quant).to("cuda")
+            except Exception:
+                log.exception("resident load failed; falling back to CPU "
+                              "offload (slower, ~16 GB of system RAM)")
+                self._pipe = Flux2KleinPipeline.from_pretrained(
+                    MODEL_ID, torch_dtype=torch.bfloat16,
+                    cache_dir=self.models_dir)
+                self._pipe.enable_model_cpu_offload()
         self._pipe.vae.enable_slicing()
         gc.collect()
         torch.cuda.empty_cache()

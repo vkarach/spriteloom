@@ -116,8 +116,9 @@ function M.ping(onOk, onFail)
       elseif mt == WebSocketMessageType.TEXT then
         done = true; ws:close()
         local ok, msg = pcall(json.decode, data)
-        -- msg.model: "ready" | "loading"; nil from an older server = ready
-        if ok and msg.type == "pong" then onOk(msg.model)
+        -- msg.model: "ready" | "loading" (nil from an older server = ready);
+        -- msg.progress: 0..1 model load fraction while loading
+        if ok and msg.type == "pong" then onOk(msg.model, msg.progress)
         else onFail("bad reply") end
       elseif mt == WebSocketMessageType.CLOSE and not done then
         done = true

@@ -187,9 +187,12 @@ async def _handler(ws):
         try:
             data = json.loads(message)
             if isinstance(data, dict) and data.get("type") == "ping":
-                # the panel shows "loading" until Klein is resident
+                # the panel shows a load bar until Klein is resident
                 model = "ready" if models.is_ready("klein") else "loading"
-                await ws.send(json.dumps({"type": "pong", "model": model}))
+                pong = {"type": "pong", "model": model}
+                if model == "loading":
+                    pong["progress"] = round(models.load_progress() or 0.0, 3)
+                await ws.send(json.dumps(pong))
                 continue
             if isinstance(data, dict) and data.get("type") == "history":
                 await ws.send(_history_msg(int(data.get("offset", 0)),

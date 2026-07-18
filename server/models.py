@@ -24,6 +24,18 @@ def is_ready(name):
     return _resident_name == name
 
 
+_load_progress = None  # 0..1 while a load is in flight, else None
+
+
+def set_load_progress(v):
+    global _load_progress
+    _load_progress = v
+
+
+def load_progress():
+    return _load_progress
+
+
 def get(name, on_stage=None):
     global _resident_name, _resident
     if name not in _factories:
@@ -45,7 +57,11 @@ def get(name, on_stage=None):
     if on_stage:
         on_stage(f"Loading {name} model...")
     log.info("loading %s", name)
-    _resident = _factories[name]()
+    set_load_progress(0.0)
+    try:
+        _resident = _factories[name]()
+    finally:
+        set_load_progress(None)
     _resident_name = name
     return _resident
 
