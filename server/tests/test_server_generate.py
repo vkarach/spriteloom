@@ -73,6 +73,12 @@ def test_preload_loads_klein_before_any_request():
         while models._resident_name != "klein" and time.time() < deadline:
             time.sleep(0.01)
         assert models._resident_name == "klein"
+
+        async def ping():
+            async with websockets.connect(f"ws://{HOST}:{PORT + 1}") as ws:
+                await ws.send(json.dumps({"type": "ping"}))
+                return json.loads(await ws.recv())
+        assert asyncio.run(ping())["model"] == "ready"
     finally:
         loop.call_soon_threadsafe(stop.set_result, None)
         t.join(timeout=5)

@@ -573,7 +573,7 @@ function D.open()
   local statusText = "Set the parameters and press Run."
   local progress = 0
   local job = nil
-  local serverStatus = "checking"  -- checking | online | offline
+  local serverStatus = "checking"  -- checking | online | warming | offline
   local pingBusy = false
   local pingTimer
   local sizeTimer
@@ -588,7 +588,12 @@ function D.open()
     if pingBusy then return end
     pingBusy = true
     client.ping(
-      function() pingBusy = false; serverStatus = "online"; repaint() end,
+      function(model)
+        pingBusy = false
+        -- server preloads Klein at startup; show it until the model is in
+        serverStatus = (model == "loading") and "warming" or "online"
+        repaint()
+      end,
       function() pingBusy = false; serverStatus = "offline"; repaint() end)
   end
 
@@ -880,6 +885,7 @@ function D.open()
       end
       gc:fillText(line, 8, 6)
       local srv = { online = { Color{ r = 106, g = 160, b = 100 }, "online" },
+                    warming = { Color{ r = 160, g = 140, b = 80 }, "loading" },
                     offline = { Color{ r = 168, g = 82, b = 62 }, "offline" },
                     checking = { Color{ r = 160, g = 140, b = 80 }, "..." } }
       local dot, word = srv[serverStatus][1], srv[serverStatus][2]

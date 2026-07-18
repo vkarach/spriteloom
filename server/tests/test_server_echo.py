@@ -31,7 +31,9 @@ def test_ping_pong(server_thread):
         async with websockets.connect(f"ws://{HOST}:{PORT}") as ws:
             await ws.send(json.dumps({"type": "ping"}))
             return json.loads(await ws.recv())
-    assert asyncio.run(go())["type"] == "pong"
+    msg = asyncio.run(go())
+    assert msg["type"] == "pong"
+    assert msg["model"] == "loading"  # nothing resident in this fixture
 
 
 def test_bad_request_returns_error(server_thread):

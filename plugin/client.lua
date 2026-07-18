@@ -116,7 +116,9 @@ function M.ping(onOk, onFail)
       elseif mt == WebSocketMessageType.TEXT then
         done = true; ws:close()
         local ok, msg = pcall(json.decode, data)
-        if ok and msg.type == "pong" then onOk() else onFail("bad reply") end
+        -- msg.model: "ready" | "loading"; nil from an older server = ready
+        if ok and msg.type == "pong" then onOk(msg.model)
+        else onFail("bad reply") end
       elseif mt == WebSocketMessageType.CLOSE and not done then
         done = true
         onFail("Server offline. Run start-server.bat.")

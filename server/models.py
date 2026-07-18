@@ -19,6 +19,11 @@ def register(name, factory):
     _factories[name] = factory
 
 
+def is_ready(name):
+    """True when the model is loaded and resident (no load wait on use)."""
+    return _resident_name == name
+
+
 def get(name, on_stage=None):
     global _resident_name, _resident
     if name not in _factories:
