@@ -226,6 +226,37 @@ local function removeInserted(entry)
   return ok
 end
 
+-- Word-wrapped read-only view of the exact prompt that will be sent.
+local function showPromptPreview(text)
+  local lines, line = {}, ""
+  for word in text:gmatch("%S+") do
+    if line ~= "" and #line + #word + 1 > 68 then
+      lines[#lines + 1] = line
+      line = word
+    else
+      line = (line == "") and word or (line .. " " .. word)
+    end
+  end
+  if line ~= "" then lines[#lines + 1] = line end
+  local H = 12 + #lines * 14
+  local dlg = Dialog("SpriteForge - Full prompt")
+  dlg:canvas{
+    width = 440, height = H,
+    onpaint = function(ev)
+      local gc = ev.context
+      gc.color = themeColor("window_face", Color{ r = 200, g = 200, b = 200 })
+      gc:fillRect(Rectangle(0, 0, 440, H))
+      gc.color = themeColor("text", Color{ r = 40, g = 40, b = 40 })
+      for n, l in ipairs(lines) do
+        gc:fillText(l, 8, 6 + (n - 1) * 14)
+      end
+    end,
+  }
+  dlg:button{ text = "Close" }
+  dlg:show{ wait = true }
+  app.refresh()
+end
+
 -- Separate results window: fixed-size grid canvas, click to insert.
 local function showResults(imgs, onInserted)
   local count = #imgs
@@ -574,13 +605,15 @@ function D.open()
   local progress = 0
   local job = nil
   local serverStatus = "checking"  -- checking | online | warming | offline
-  local loadProgress = 0    -- 0..1 model load fraction while warming
+  local loadProgress = 0    -- 0..1 fraction of the current load stage
+  local loadStage = nil     -- label of the current load stage
   local pingBusy = false
   local pingAt = 0          -- watchdog: never let a lost ping jam the loop
   local pingMisses = 0      -- debounce: one lost ping is not "offline"
   local pingTimer
-  local pingInterval = 10.0
-  local updateHint, retunePing  -- forward: checkServer uses both
+  local pingInterval = 3.0
+  -- forward declarations: checkServer runs before these are defined
+  local updateHint, retunePing, syncButtons
   local sizeTimer
   local animTimer   -- drives the busy animation only while running
   local baseW, baseH  -- nil = re-capture on next guard tick
@@ -594,17 +627,19 @@ function D.open()
     pingBusy = true
     pingAt = os.clock()
     client.ping(
-      function(model, progress)
+      function(model, progress, stage)
         pingBusy = false
         pingMisses = 0
         -- server preloads Klein at startup; show it until the model is in
         serverStatus = (model == "loading") and "warming" or "online"
         loadProgress = progress or 0
+        loadStage = stage
         -- a stale "Server offline" error must clear once the server answers
         if state == "error" and statusText:find("offline") then
           updateHint()
         end
         retunePing()
+        syncButtons()
         repaint()
       end,
       function()
@@ -617,14 +652,16 @@ function D.open()
           serverStatus = "offline"
         end
         retunePing()
+        syncButtons()
         repaint()
       end)
   end
 
-  -- Warming wants a lively bar (1s pings); otherwise 10s is plenty.
+  -- Warming wants a lively bar (1s pings); 3s otherwise keeps the
+  -- online/offline word honest without spamming.
   function retunePing()
     if not Timer or not pingTimer then return end
-    local want = (serverStatus == "warming") and 1.0 or 10.0
+    local want = (serverStatus == "warming") and 1.0 or 3.0
     if pingInterval == want then return end
     pingInterval = want
     pingTimer:stop()
@@ -632,12 +669,20 @@ function D.open()
     pingTimer:start()
   end
 
+  -- Buttons follow both the job state and the server state: no point
+  -- clicking Run or History at a dead server.
+  function syncButtons()
+    local up = serverStatus == "online" or serverStatus == "warming"
+    dlg:modify{ id = "run", enabled = up and state ~= "running" }
+    dlg:modify{ id = "historybtn", enabled = up }
+    dlg:modify{ id = "cancel", enabled = state == "running" }
+  end
+
   local function setState(s, text)
     state = s
     statusText = text
     local running = (s == "running")
-    dlg:modify{ id = "run", enabled = not running }
-    dlg:modify{ id = "cancel", enabled = running }
+    syncButtons()
     if Timer then
       if running and not animTimer then
         animTimer = Timer{ interval = 0.08, ontick = repaint }
@@ -660,8 +705,14 @@ function D.open()
     if m == "Generate" then
       local text = assembleGenPrompt(d.genView, d.genSubject, d.genDetails)
       if text then
-        if #text > 34 then text = text:sub(1, 34) .. "..." end
-        reqs[1] = { true, 'Will send: "' .. text .. '"' }
+        local full = text
+        if #text > 34 then
+          -- truncated: keep the full text, a click on the row expands it
+          reqs[1] = { true, 'Will send: "' .. text:sub(1, 34) .. '..."',
+                      full }
+        else
+          reqs[1] = { true, 'Will send: "' .. text .. '"' }
+        end
       else
         reqs[1] = { false, "Subject describes what to generate" }
       end
@@ -677,8 +728,13 @@ function D.open()
       reqs[1] = { spr ~= nil, "A sprite is open" }
       local text = assembleInstruction(d.viewPreset, d.subject, d.instruction)
       if text then
-        if #text > 34 then text = text:sub(1, 34) .. "..." end
-        reqs[2] = { true, 'Will send: "' .. text .. '"' }
+        local full = text
+        if #text > 34 then
+          reqs[2] = { true, 'Will send: "' .. text:sub(1, 34) .. '..."',
+                      full }
+        else
+          reqs[2] = { true, 'Will send: "' .. text .. '"' }
+        end
       else
         reqs[2] = { false, "Pick a view preset or type an instruction" }
       end
@@ -791,7 +847,11 @@ function D.open()
     end
 
     progress = 0
-    setState("running", "Contacting server...")
+    -- during model load the job queues on the server; say so instead of a
+    -- misleading endless "Contacting server" (Cancel works while queued)
+    setState("running", serverStatus == "warming"
+             and "Queued - will start when the model is loaded"
+             or "Contacting server...")
 
     job = client.request(payload, {
       onprogress = function(v, stage)
@@ -895,15 +955,24 @@ function D.open()
       gc:fillRect(Rectangle(0, 0, STATUS_W, STATUS_H))
       gc.color = shade(face, 0.93)
       gc:fillRect(Rectangle(1, 1, STATUS_W - 2, STATUS_H - 2))
-      if state == "error" then
+      if state == "error"
+         or (state ~= "running" and serverStatus == "offline") then
         gc.color = Color{ r = 168, g = 82, b = 62 }
       else
         gc.color = themeColor("text", Color{ r = 40, g = 40, b = 40 })
       end
+      -- One story at a time. Until the server is ready the status line
+      -- talks ONLY about the server; task hints/checklist wait for online.
       local line = statusText
       if state == "running" then
         line = line:gsub("%.+$", "")
         line = line .. string.rep(".", math.floor(os.clock() * 3) % 4)
+      elseif serverStatus == "checking" then
+        line = "Connecting to server..."
+      elseif serverStatus == "offline" then
+        line = "Server offline - run start-server.bat"
+      elseif serverStatus == "warming" and state ~= "error" then
+        line = "Loading Klein model"
       end
       -- ellipsize so a long stage message never collides with the
       -- server-status word on the right
@@ -920,9 +989,10 @@ function D.open()
       end
       gc:fillText(line, 8, 6)
       local srv = { online = { Color{ r = 106, g = 160, b = 100 }, "online" },
-                    warming = { Color{ r = 212, g = 180, b = 74 }, "loading" },
+                    warming = { Color{ r = 214, g = 138, b = 48 }, "loading" },
                     offline = { Color{ r = 168, g = 82, b = 62 }, "offline" },
-                    checking = { Color{ r = 212, g = 180, b = 74 }, "..." } }
+                    checking = { Color{ r = 214, g = 138, b = 48 },
+                                 "checking" } }
       local dot, word = srv[serverStatus][1], srv[serverStatus][2]
       local wordW = 6 * #word
       local ok, size = pcall(function() return gc:measureText(word) end)
@@ -945,6 +1015,14 @@ function D.open()
                            0.75)
           gc:fillText(string.format("%d%%", math.floor(progress * 100)),
                       math.floor(STATUS_W / 2) - 8, 38)
+        elseif serverStatus == "warming" then
+          -- queued behind the model load: show the load stage honestly
+          gc:fillRect(Rectangle(bx + 1, by + 1,
+                                math.floor((bw - 2) * loadProgress), bh - 2))
+          gc.color = shade(themeColor("text", Color{ r = 40, g = 40, b = 40 }),
+                           0.75)
+          gc:fillText(string.format("%s  %d%%", loadStage or "Starting",
+                                    math.floor(loadProgress * 100)), bx, 38)
         else
           local seg = math.floor((bw - 2) * 0.25)
           local ph = (os.clock() * 0.8) % 1
@@ -952,28 +1030,22 @@ function D.open()
           local x = bx + 1 + math.floor((bw - 2 - seg) * tri)
           gc:fillRect(Rectangle(x, by + 1, seg, bh - 2))
         end
-      elseif serverStatus == "checking" then
-        -- first ping still in flight: say so instead of a bare "..."
-        gc.color = shade(themeColor("text", Color{ r = 40, g = 40, b = 40 }),
-                         0.75)
-        gc:fillText("Connecting to server...", 8, 38)
       elseif serverStatus == "warming" then
-        -- Model load bar: same style as the run bar, fed by ping progress.
+        -- Per-stage load bar, exactly what the server console shows: the
+        -- bar fills for the current stage and resets on the next one.
         local bx, by, bw, bh = 8, 22, STATUS_W - 16, 10
         gc.color = shade(face, 0.85)
         gc:fillRect(Rectangle(bx, by, bw, bh))
-        if loadProgress > 0 then
-          gc.color = shade(face, 0.55)
-          gc:fillRect(Rectangle(bx + 1, by + 1,
-                                math.floor((bw - 2) * loadProgress), bh - 2))
-        end
+        gc.color = shade(face, 0.55)
+        gc:fillRect(Rectangle(bx + 1, by + 1,
+                              math.floor((bw - 2) * loadProgress), bh - 2))
         gc.color = shade(themeColor("text", Color{ r = 40, g = 40, b = 40 }),
                          0.75)
-        local label = (loadProgress > 0)
-          and string.format("Loading Klein model  %d%%",
-                            math.floor(loadProgress * 100))
-          or "Loading Klein model..."
-        gc:fillText(label, bx, 38)
+        local lbl = string.format("%s  %d%%", loadStage or "Starting",
+                                  math.floor(loadProgress * 100))
+        gc:fillText(lbl, bx, 38)
+      elseif serverStatus == "checking" or serverStatus == "offline" then
+        -- the status line already tells the whole story, keep the rest calm
       else
         -- Checklist drawn as a tree hanging off the status line.
         local textCol = themeColor("text", Color{ r = 40, g = 40, b = 40 })
@@ -1016,6 +1088,13 @@ function D.open()
         end
       end
     end,
+    onmouseup = function(ev)
+      -- checklist rows with a stored full prompt expand on click
+      if state == "running" or serverStatus ~= "online" then return end
+      local i = math.floor((ev.y - 16) / 13) + 1
+      local r = requirements()[i]
+      if r and r[3] then showPromptPreview(r[3]) end
+    end,
   }
   dlg:button{ id = "run", text = "Run", onclick = startRun }
   dlg:button{ id = "cancel", text = "Cancel", enabled = false,
@@ -1031,7 +1110,7 @@ function D.open()
   D._isOpen = true
   updateHint()
   if Timer then
-    pingTimer = Timer{ interval = 10.0, ontick = checkServer }
+    pingTimer = Timer{ interval = pingInterval, ontick = checkServer }
     pingTimer:start()
     -- The Dialog API has no "not resizable" flag; snap the size back if the
     -- user drags an edge (moving the window stays allowed).

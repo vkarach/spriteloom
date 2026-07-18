@@ -15,7 +15,7 @@ def test_load_progress_visible_during_factory():
     models.register("m", factory)
     assert models.load_progress() is None
     models.get("m")
-    assert seen["during"] == 0.0
+    assert seen["during"] == (0.0, None)
     assert models.load_progress() is None  # cleared even though no reports
     assert models.is_ready("m")
     models.reset()
@@ -32,19 +32,21 @@ def test_load_progress_cleared_after_factory_failure():
     models.reset()
 
 
-def test_report_tqdm_nested_bars_yield_one_fraction():
+def test_report_tqdm_relays_current_bar_with_label():
     import tqdm
     import tqdm.auto
     vals = []
-    with _report_tqdm(vals.append):
-        outer = tqdm.tqdm(total=2, file=io.StringIO())
-        inner = tqdm.auto.tqdm(total=4, file=io.StringIO())
-        inner.update(2)          # half of the first outer item -> 0.25
-        inner.close()
-        outer.update(1)          # first outer item done -> 0.5
+    with _report_tqdm(lambda v, s=None: vals.append((v, s))):
+        outer = tqdm.tqdm(total=2, desc="Loading pipeline components",
+                          file=io.StringIO())
+        inner = tqdm.auto.tqdm(total=4, desc="Loading checkpoint shards",
+                               file=io.StringIO())
+        inner.update(2)   # innermost bar wins: 0.5 of the shards stage
+        inner.close()     # back to the components bar
+        outer.update(1)
         outer.close()
-    assert any(abs(v - 0.25) < 1e-6 for v in vals)
-    assert abs(vals[-1] - 0.5) < 1e-6
+    assert (0.5, "Loading checkpoint shards") in vals
+    assert vals[-1] == (0.5, "Loading pipeline components")
     # the patch must not leak outside the context
     assert "Mirror" not in tqdm.tqdm.__name__
 
@@ -52,8 +54,8 @@ def test_report_tqdm_nested_bars_yield_one_fraction():
 def test_report_tqdm_ignores_totalless_bars():
     import tqdm
     vals = []
-    with _report_tqdm(vals.append):
+    with _report_tqdm(lambda v, s=None: vals.append((v, s))):
         bar = tqdm.tqdm(file=io.StringIO())  # no total (download-style)
         bar.update(3)
         bar.close()
-    assert all(v == 0.0 for v in vals)
+    assert all(v == (0.0, None) for v in vals)

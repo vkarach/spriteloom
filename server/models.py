@@ -24,12 +24,14 @@ def is_ready(name):
     return _resident_name == name
 
 
-_load_progress = None  # 0..1 while a load is in flight, else None
+_load_progress = None  # (0..1 of current stage, stage label) while loading
 
 
-def set_load_progress(v):
+def set_load_progress(v, stage=None):
+    """Mirror of the CURRENT console bar - no merging into one fake total.
+    v=None clears (load finished/failed)."""
     global _load_progress
-    _load_progress = v
+    _load_progress = None if v is None else (v, stage)
 
 
 def load_progress():
@@ -68,7 +70,8 @@ def get(name, on_stage=None):
 
 def reset():
     """Drop everything (tests and error recovery)."""
-    global _resident_name, _resident
+    global _resident_name, _resident, _load_progress
     _resident = None
     _resident_name = None
+    _load_progress = None
     _factories.clear()

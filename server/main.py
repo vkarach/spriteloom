@@ -192,7 +192,10 @@ async def _handler(ws):
                 model = "ready" if models.is_ready("klein") else "loading"
                 pong = {"type": "pong", "model": model}
                 if model == "loading":
-                    pong["progress"] = round(models.load_progress() or 0.0, 3)
+                    prog = models.load_progress()
+                    pong["progress"] = round(prog[0], 3) if prog else 0.0
+                    if prog and prog[1]:
+                        pong["stage"] = prog[1]
                 await ws.send(json.dumps(pong))
                 continue
             if isinstance(data, dict) and data.get("type") == "history":

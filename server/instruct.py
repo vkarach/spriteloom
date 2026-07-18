@@ -36,38 +36,41 @@ def t2i_size(target_size: tuple[int, int],
 
 @contextlib.contextmanager
 def _report_tqdm(report):
-    """Mirror the nested tqdm bars of from_pretrained (pipeline components,
-    checkpoint shards) into one 0..1 fraction. diffusers/transformers resolve
-    tqdm at call time, so swapping the class catches their bars."""
+    """Relay the CURRENT tqdm bar of from_pretrained (innermost one with a
+    total) as (fraction, description) - the panel shows the same stages the
+    console does instead of one merged made-up percentage.
+    diffusers/transformers resolve tqdm at call time, so swapping the class
+    catches their bars."""
     import tqdm as tqdm_lib
     import tqdm.auto as tqdm_auto
     real = tqdm_lib.tqdm
     stack = []  # active bars, outermost first
 
-    def overall():
-        f, w = 0.0, 1.0
-        for bar in stack:
+    def current():
+        for bar in reversed(stack):
             t = getattr(bar, "total", None) or 0
-            if t <= 0:
-                continue
-            f += w * min(bar.n / t, 1.0)
-            w /= t
-        return min(f, 1.0)
+            if t > 0:
+                label = (getattr(bar, "desc", "") or "").rstrip(": ")
+                return min(bar.n / t, 1.0), (label or None)
+        return 0.0, None
 
     class Mirror(real):
         def __init__(self, *a, **kw):
             super().__init__(*a, **kw)
             stack.append(self)
+            report(*current())
 
         def update(self, n=1):
             out = super().update(n)
-            report(overall())
+            report(*current())
             return out
 
         def close(self):
             if self in stack:
                 stack.remove(self)
             super().close()
+            if stack:
+                report(*current())
 
     tqdm_lib.tqdm = Mirror
     tqdm_auto.tqdm = Mirror
@@ -86,11 +89,13 @@ class KleinPipeline:
     def load(self):
         if self._pipe is not None:
             return
+        from server import models
+        models.set_load_progress(0.0, "Importing torch")
         import gc
         import torch
         from diffusers import Flux2KleinPipeline
-        from server import models
         log.info("loading %s (first run downloads ~15 GB)...", MODEL_ID)
+        models.set_load_progress(0.0, "Reading model files")
         with _report_tqdm(models.set_load_progress):
             try:
                 from diffusers import PipelineQuantizationConfig
@@ -110,6 +115,7 @@ class KleinPipeline:
                     MODEL_ID, torch_dtype=torch.bfloat16,
                     cache_dir=self.models_dir)
                 self._pipe.enable_model_cpu_offload()
+        models.set_load_progress(1.0, "Finishing up")
         self._pipe.vae.enable_slicing()
         gc.collect()
         torch.cuda.empty_cache()
