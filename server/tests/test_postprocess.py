@@ -218,6 +218,88 @@ def test_remove_background_keeps_inner_holes():
     assert out.getpixel((2, 2))[3] == 255  # enclosed, not reached by flood
 
 
+def test_remove_background_eats_soft_shadow():
+    # white bg with a smooth gray gradient (drop shadow) next to a sharp
+    # dark subject: shadow goes, subject stays
+    img = Image.new("RGBA", (40, 20), (250, 250, 250, 255))
+    for i, x in enumerate(range(20, 30)):    # gradient 250 -> 205, step 5
+        v = 250 - (i + 1) * 5
+        for y in range(20):
+            img.putpixel((x, y), (v, v, v, 255))
+    for x in range(5, 15):                   # sharp-edged dark subject
+        for y in range(5, 15):
+            img.putpixel((x, y), (90, 50, 20, 255))
+    out = remove_background(img, tolerance=12)
+    assert out.getpixel((29, 10))[3] == 0    # darkest shadow band cleared
+    assert out.getpixel((10, 10)) == (90, 50, 20, 255)
+
+
+def test_remove_background_handles_gradient_lit_wall():
+    # lighting gradient across the whole bg: no single color covers 60% of
+    # the border, but smooth growth still clears it all
+    img = Image.new("RGBA", (60, 20), (0, 0, 0, 0))
+    for x in range(60):
+        v = 150 + x  # 150..209, far beyond tolerance end to end
+        for y in range(20):
+            img.putpixel((x, y), (v, v, v, 255))
+    for x in range(25, 35):
+        for y in range(5, 15):
+            img.putpixel((x, y), (30, 30, 200, 255))
+    out = remove_background(img, tolerance=12)
+    assert out.getpixel((0, 10))[3] == 0
+    assert out.getpixel((59, 10))[3] == 0
+    assert out.getpixel((30, 10)) == (30, 30, 200, 255)
+
+
+def test_remove_background_drops_border_debris():
+    # a thin dark floor line pinned to the bottom border survives the flood
+    # (sharp edge) but must go as debris; the big subject stays
+    img = Image.new("RGBA", (100, 100), (250, 250, 250, 255))
+    for x in range(10, 90):
+        for y in range(10, 90):
+            img.putpixel((x, y), (90, 50, 20, 255))
+    for x in range(100):
+        img.putpixel((x, 99), (40, 30, 25, 255))
+    out = remove_background(img, tolerance=12)
+    assert out.getpixel((50, 99))[3] == 0    # floor line dropped
+    assert out.getpixel((50, 50)) == (90, 50, 20, 255)
+
+
+def test_remove_background_eats_bg_shading_touching_cleared_area():
+    # a gray patch = darkened white bg (same chromaticity) glued to the
+    # subject and open to the cleared bg: it is a cast shadow, remove it
+    img = Image.new("RGBA", (40, 40), (250, 250, 250, 255))
+    for x in range(10, 30):
+        for y in range(10, 25):
+            img.putpixel((x, y), (200, 60, 40, 255))
+    for x in range(10, 30):
+        for y in range(25, 30):
+            img.putpixel((x, y), (125, 125, 125, 255))
+    out = remove_background(img, tolerance=12)
+    assert out.getpixel((20, 27))[3] == 0     # shadow gone
+    assert out.getpixel((20, 15)) == (200, 60, 40, 255)
+
+
+def test_downscale_dark_minority_outline_wins_cell():
+    # 8x8 cell: 12/64 dark outline pixels (~19%) - majority vote alone
+    # would drop the line, the dark bias keeps it
+    img = Image.new("RGBA", (8, 8), (200, 150, 100, 255))
+    for x in range(8):
+        img.putpixel((x, 0), (20, 12, 7, 255))
+    for x in range(4):
+        img.putpixel((x, 1), (20, 12, 7, 255))
+    out = downscale(img, (1, 1), palette=[(20, 12, 7), (200, 150, 100)])
+    assert out.getpixel((0, 0)) == (20, 12, 7, 255)
+
+
+def test_downscale_dark_bias_ignores_stray_noise():
+    # a single dark pixel in a 8x8 cell (1.5%) must NOT take the cell
+    img = Image.new("RGBA", (8, 8), (200, 150, 100, 255))
+    img.putpixel((3, 3), (20, 12, 7, 255))
+    out = downscale(img, (1, 1), palette=[(20, 12, 7), (200, 150, 100)])
+    assert out.getpixel((0, 0)) == (200, 150, 100, 255)
+
+
 def _reference_remove_bg(img, tolerance=12):
     """Original per-pixel BFS flood, kept only to pin the vectorized version."""
     import numpy as np

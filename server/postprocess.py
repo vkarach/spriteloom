@@ -6,12 +6,18 @@ from scipy import ndimage
 
 def downscale(img: Image.Image, target_size: tuple[int, int],
               keep: float = 0.3,
-              palette: list[tuple[int, int, int]] | None = None
+              palette: list[tuple[int, int, int]] | None = None,
+              dark_share: float = 0.15, dark_gap: int = 35
               ) -> Image.Image:
     """Palette-majority downscale: each opaque pixel votes for its nearest
     palette color, the cell takes the winner. Unlike a median this never
     invents in-between colors, so outlines survive. A cell stays opaque
-    when at least `keep` of its pixels are opaque."""
+    when at least `keep` of its pixels are opaque.
+
+    Outline preservation: a palette color at least `dark_gap` luminance
+    darker than the majority winner takes the cell with only a `dark_share`
+    minority - thin dark lines land as split minorities across neighboring
+    cells and would otherwise vanish into speckles."""
     tw, th = target_size
     arr = np.asarray(img.convert("RGBA"))
     h, w = arr.shape[:2]
@@ -34,9 +40,17 @@ def downscale(img: Image.Image, target_size: tuple[int, int],
     total = np.bincount(cell, minlength=tw * th)
     opq = votes.sum(1)
 
+    winner = votes.argmax(1)
+    lum = pal @ np.float32([0.299, 0.587, 0.114])
+    need = np.maximum(1, (dark_share * opq).astype(np.int32))
+    cand = (votes >= need[:, None]) \
+        & (lum[None, :] <= lum[winner][:, None] - dark_gap)
+    dark = np.where(cand, lum[None, :], np.inf).argmin(1)
+    winner = np.where(cand.any(1), dark, winner)
+
     out = np.zeros((tw * th, 4), dtype=np.uint8)
     solid = (opq > 0) & (opq >= keep * total)
-    out[solid, :3] = pal[votes.argmax(1)[solid]].astype(np.uint8)
+    out[solid, :3] = pal[winner[solid]].astype(np.uint8)
     out[solid, 3] = 255
     return Image.fromarray(out.reshape(th, tw, 4), "RGBA")
 
@@ -130,10 +144,17 @@ def snap_to_palette(img: Image.Image, palette: list[tuple[int, int, int]]) -> Im
 
 
 def remove_background(img: Image.Image, tolerance: int = 12,
-                      force: bool = False) -> Image.Image:
+                      force: bool = False, step_tol: int = 10
+                      ) -> Image.Image:
     """Flood-fill from border pixels matching the dominant border color;
-    reached pixels become transparent, enclosed regions are kept. Skipped
-    when under 60% of the border matches, unless `force` is set."""
+    reached pixels become transparent, enclosed regions are kept.
+
+    A second pass grows the cleared region through smooth gradients (drop
+    shadows, wall vignettes): a pixel is eaten when it differs from an
+    already-cleared neighbor by at most `step_tol` per channel and stays
+    within 5x tolerance of the background color. Sharp subject outlines
+    stop the growth. Reverted when under 60% of the border ends up cleared
+    (no dominant background), unless `force` is set."""
     arr = np.asarray(img.convert("RGBA")).astype(int).copy()
     h, w = arr.shape[:2]
     border = np.concatenate([arr[0, :, :3], arr[-1, :, :3],
@@ -142,9 +163,6 @@ def remove_background(img: Image.Image, tolerance: int = 12,
     # yield a blend that matches nothing)
     med = np.median(border, axis=0)
     bg = border[np.abs(border - med).sum(axis=1).argmin()]
-    matching = (np.abs(border - bg).max(axis=1) <= tolerance).mean()
-    if not force and matching < 0.6:
-        return img.convert("RGBA")  # no dominant background color detected
 
     bgmask = np.abs(arr[:, :, :3] - bg).max(axis=2) <= tolerance
     seed = np.zeros((h, w), dtype=bool)
@@ -152,5 +170,73 @@ def remove_background(img: Image.Image, tolerance: int = 12,
     seed[:, 0], seed[:, -1] = bgmask[:, 0], bgmask[:, -1]
     cross = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
     cleared = ndimage.binary_propagation(seed, mask=bgmask, structure=cross)
+
+    rgb = arr[:, :, :3]
+    near_bg = np.abs(rgb - bg).max(axis=2) <= 5 * tolerance
+    # per-direction smooth steps, precomputed once: smooth[k][y, x] is True
+    # when pixel (y, x) is a gentle continuation of its neighbor opposite
+    # to shift k
+    shifts = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    smooth = []
+    for dy, dx in shifts:
+        ok = np.zeros((h, w), dtype=bool)
+        dst = (slice(max(dy, 0), h + min(dy, 0)),
+               slice(max(dx, 0), w + min(dx, 0)))
+        src = (slice(max(-dy, 0), h + min(-dy, 0)),
+               slice(max(-dx, 0), w + min(-dx, 0)))
+        ok[dst] = np.abs(rgb[dst] - rgb[src]).max(axis=2) <= step_tol
+        smooth.append((dst, src, ok & near_bg))
+    for _ in range(max(h, w)):
+        grew = False
+        for dst, src, ok in smooth:
+            cand = np.zeros((h, w), dtype=bool)
+            cand[dst] = cleared[src]
+            cand &= ok & ~cleared
+            if cand.any():
+                cleared |= cand
+                grew = True
+        if not grew:
+            break
+
+    edge = np.concatenate([cleared[0, :], cleared[-1, :],
+                           cleared[:, 0], cleared[:, -1]])
+    if not force and edge.mean() < 0.6:
+        return img.convert("RGBA")  # no dominant background color detected
     arr[cleared, 3] = 0
+
+    # debris pass: leftover scraps pinned to the border (floor contact
+    # lines, shadow slivers) are background, not subject. Two kinds:
+    # small isolated components, and thin appendages of the silhouette
+    # (opening strips anything under ~5px thick) that run into the border.
+    # shadings of the background (same chromaticity, darker/lighter - floor
+    # shadows, wall vignettes): reachable ones get eaten by the flood below;
+    # enclosed pockets and anything behind an outline stay
+    rgbf = arr[:, :, :3].astype(np.float64)
+    bgf = bg.astype(np.float64)
+    s = (rgbf @ bgf) / (bgf @ bgf)
+    shade = (np.abs(rgbf - s[..., None] * bgf).max(axis=2) <= tolerance) \
+        & (s >= 0.25) & (s <= 1.15)
+
+    k = 5 if min(h, w) >= 128 else 3
+    for _ in range(2):  # dropping a strip can expose/isolate more debris
+        opaque = arr[:, :, 3] > 0
+        gone = ~opaque
+        reach = ndimage.binary_propagation(gone, mask=gone | shade,
+                                           structure=cross)
+        arr[reach & opaque, 3] = 0
+        opaque = arr[:, :, 3] > 0
+        thin = opaque & ~ndimage.binary_opening(opaque,
+                                                structure=np.ones((k, k)))
+        for mask, cap in ((opaque, 0.02 * opaque.sum()), (thin, np.inf)):
+            labels, n = ndimage.label(mask, structure=cross)
+            if n < (2 if mask is opaque else 1):
+                continue  # a lone component is the subject, never debris
+            sizes = np.bincount(labels.ravel())
+            on_border = np.zeros(n + 1, dtype=bool)
+            for band in (labels[0, :], labels[-1, :],
+                         labels[:, 0], labels[:, -1]):
+                on_border[band] = True
+            drop = on_border & (sizes < cap)
+            drop[0] = False
+            arr[drop[labels], 3] = 0
     return Image.fromarray(arr.astype(np.uint8), "RGBA")
