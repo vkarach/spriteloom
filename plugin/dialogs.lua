@@ -577,6 +577,7 @@ function D.open()
   local loadProgress = 0    -- 0..1 model load fraction while warming
   local pingBusy = false
   local pingAt = 0          -- watchdog: never let a lost ping jam the loop
+  local pingMisses = 0      -- debounce: one lost ping is not "offline"
   local pingTimer
   local pingInterval = 10.0
   local updateHint, retunePing  -- forward: checkServer uses both
@@ -595,6 +596,7 @@ function D.open()
     client.ping(
       function(model, progress)
         pingBusy = false
+        pingMisses = 0
         -- server preloads Klein at startup; show it until the model is in
         serverStatus = (model == "loading") and "warming" or "online"
         loadProgress = progress or 0
@@ -607,7 +609,13 @@ function D.open()
       end,
       function()
         pingBusy = false
-        serverStatus = "offline"
+        pingMisses = pingMisses + 1
+        -- a live server can miss one ping while the model load hogs it;
+        -- flip to offline only when it was never seen alive or misses twice
+        local alive = serverStatus == "online" or serverStatus == "warming"
+        if not alive or pingMisses >= 2 then
+          serverStatus = "offline"
+        end
         retunePing()
         repaint()
       end)
@@ -944,6 +952,11 @@ function D.open()
           local x = bx + 1 + math.floor((bw - 2 - seg) * tri)
           gc:fillRect(Rectangle(x, by + 1, seg, bh - 2))
         end
+      elseif serverStatus == "checking" then
+        -- first ping still in flight: say so instead of a bare "..."
+        gc.color = shade(themeColor("text", Color{ r = 40, g = 40, b = 40 }),
+                         0.75)
+        gc:fillText("Connecting to server...", 8, 38)
       elseif serverStatus == "warming" then
         -- Model load bar: same style as the run bar, fed by ping progress.
         local bx, by, bw, bh = 8, 22, STATUS_W - 16, 10

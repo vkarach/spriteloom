@@ -4,6 +4,7 @@ import functools
 import json
 import logging
 import pathlib
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -234,6 +235,9 @@ async def serve(host="127.0.0.1", port=8765, stop=None, on_ready=None,
                 preload=False):
     if not models._factories:
         _register_default_models()
+    # Model load / generation hog the GIL in the worker thread; a shorter
+    # switch interval keeps the loop answering pings meanwhile.
+    sys.setswitchinterval(0.001)
     if preload:
         _preload_klein()
     # no keepalive pings: GIL-heavy generation starves the loop and the 20s
