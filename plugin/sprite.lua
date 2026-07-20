@@ -42,10 +42,17 @@ function S.exportMask()
   if sel.isEmpty then return nil end
   local img = Image(spr.width, spr.height)
   local white = Color{ r = 255, g = 255, b = 255 }
-  local black = Color{ r = 0, g = 0, b = 0 }
-  for y = 0, spr.height - 1 do
-    for x = 0, spr.width - 1 do
-      img:drawPixel(x, y, sel:contains(Point(x, y)) and white or black)
+  img:clear(Color{ r = 0, g = 0, b = 0 })
+  -- Only the selection's bounding box can be white, so testing the whole
+  -- canvas is wasted work: a small selection on a 512px sprite went from
+  -- 262144 contains() calls to a few thousand, on Aseprite's UI thread.
+  local b = sel.bounds
+  local x0, y0 = math.max(0, b.x), math.max(0, b.y)
+  local x1 = math.min(spr.width - 1, b.x + b.width - 1)
+  local y1 = math.min(spr.height - 1, b.y + b.height - 1)
+  for y = y0, y1 do
+    for x = x0, x1 do
+      if sel:contains(x, y) then img:drawPixel(x, y, white) end
     end
   end
   local p = tempPath("mask.png")

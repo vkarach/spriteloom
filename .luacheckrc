@@ -10,10 +10,10 @@ read_globals = {
 -- init/exit are the entry points Aseprite calls; exit's argument is part of
 -- the required signature even though the plugin ignores it.
 files["plugin/main.lua"] = { globals = { "init", "exit" }, unused_args = false }
--- The harness replaces the Aseprite API with stubs on purpose.
+-- The harness replaces the Aseprite API (and io.open) with stubs on purpose.
 files["plugin/tests/*.lua"] = {
   globals = { "app", "Color", "Rectangle", "Point", "Image", "ColorMode",
               "Dialog", "Timer", "WebSocket", "WebSocketMessageType", "json",
-              "REPLY" },
+              "REPLY", "io" },
 }
 max_line_length = 100

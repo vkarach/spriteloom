@@ -6,16 +6,17 @@
 --  * after anything that can shrink/close a window, call app.refresh() to
 --    repaint the vacated screen area, or a ghost strip stays behind.
 local pluginDir = ...
-local function load(name)
+-- Modules take pluginDir as their argument, so they can load each other.
+local function moduleFrom(name)
   return assert(loadfile(app.fs.joinPath(pluginDir, name)))(pluginDir)
 end
 
 local client = dofile(app.fs.joinPath(pluginDir, "client.lua"))
-local P = load("prompt.lua")
-local ui = load("ui.lua")
-local sprite = load("sprite.lua")
-local results = load("results.lua")
-local history = load("history.lua")
+local P = moduleFrom("prompt.lua")
+local ui = moduleFrom("ui.lua")
+local sprite = moduleFrom("sprite.lua")
+local results = moduleFrom("results.lua")
+local history = moduleFrom("history.lua")
 
 local D = {}
 

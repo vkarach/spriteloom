@@ -26,12 +26,17 @@ end })
 ColorMode = { RGB = 0 }
 
 local function stubImage(w, h)
-  return {
+  local im
+  im = {
     width = w or 8, height = h or 8, bytes = "",
-    putPixel = function() end, drawPixel = function() end,
+    painted = {}, cleared = nil, contains = 0,
+    putPixel = function() end,
+    drawPixel = function(_, x, y) im.painted[x .. "," .. y] = true end,
+    clear = function(_, c) im.cleared = c end,
     drawImage = function() end, drawSprite = function() end,
     saveAs = function() end,
   }
+  return im
 end
 Image = setmetatable({}, { __call = function(_, a, b)
   if type(a) == "table" then return stubImage() end
@@ -157,6 +162,60 @@ if ui then
         ui.variantAt({ x = g.cw * 5, y = 3 }, g, imgs) == nil, "")
   local painted, e2 = pcall(ui.drawVariants, stubGC(), imgs, g, { [1] = true })
   check("drawVariants paints a selected variant", painted, e2)
+end
+
+-- exportMask must paint exactly the selection, and must not walk the whole
+-- canvas to do it (that ran on Aseprite's UI thread).
+do
+  local S = assert(loadfile("plugin/sprite.lua"))("plugin")
+  local madeImage
+  local realImage = Image
+  -- saveAs is a stub, so the file the export reads back never exists.
+  local realOpen = io.open
+  io.open = function()
+    return { read = function() return "fake png bytes" end,
+             write = function() end, close = function() end }
+  end
+  Image = setmetatable({}, { __call = function(_, a, b)
+    madeImage = stubImage(type(a) == "table" and 8 or a,
+                          type(a) == "table" and 8 or b)
+    return madeImage
+  end })
+  local tested = 0
+  app.sprite = {
+    width = 512, height = 512,
+    selection = {
+      isEmpty = false,
+      bounds = Rectangle(100, 60, 20, 10),
+      contains = function(_, x, y)
+        tested = tested + 1
+        return x >= 100 and x < 120 and y >= 60 and y < 70
+      end,
+    },
+  }
+  local ok2, e = pcall(S.exportMask)
+  check("exportMask runs", ok2, e)
+  check("exportMask fills the canvas black once",
+        madeImage and madeImage.cleared ~= nil, "clear() not called")
+  check("exportMask only tests the selection bounds (got " .. tested .. ")",
+        tested == 20 * 10, tested)
+  local painted = 0
+  for _ in pairs(madeImage.painted) do painted = painted + 1 end
+  check("exportMask whitens exactly the selection", painted == 20 * 10, painted)
+  check("exportMask paints inside the selection",
+        madeImage.painted["100,60"] == true, "corner missing")
+  check("exportMask leaves outside pixels black",
+        madeImage.painted["99,60"] == nil, "painted outside")
+
+  -- A selection hanging off the canvas must be clamped, not indexed past it.
+  app.sprite.selection.bounds = Rectangle(-5, -5, 10, 10)
+  local ok3, e3 = pcall(S.exportMask)
+  check("exportMask clamps a selection that starts off-canvas", ok3, e3)
+
+  app.sprite.selection.isEmpty = true
+  check("exportMask returns nil without a selection", S.exportMask() == nil, "")
+  Image, io.open = realImage, realOpen
+  app.sprite = nil
 end
 
 -- Drive the panel: open it under each server reply, then repaint the status
