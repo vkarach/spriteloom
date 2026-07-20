@@ -1,8 +1,5 @@
--- Theme colors and shared canvas drawing.
---
--- Aseprite dialog rules that shaped this: dynamic text lives on a canvas
--- (repaint does not relayout), and anything that shrinks/closes a window
--- needs app.refresh() or a ghost strip stays behind.
+-- Theme colors and canvas drawing. Aseprite: dynamic text must live on a
+-- canvas, and whatever shrinks/closes a window needs app.refresh() or ghosts.
 local U = {}
 
 U.SELECTED = Color{ r = 106, g = 160, b = 100 }

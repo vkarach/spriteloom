@@ -50,8 +50,7 @@ def _prune_raw(keep=RAW_KEEP):
 
 
 def _save_debug(req, raw_images, final_images):
-    """Keep every request in its own folder: uncompressed originals, final
-    sprites, and the settings that produced them."""
+    """One folder per request: raw originals, final sprites, settings."""
     if not DEBUG_SAVE:
         return
     try:
@@ -74,8 +73,7 @@ def _save_debug(req, raw_images, final_images):
 
 
 def _history_msg(offset, limit, preview=False):
-    """Page of past runs, newest first: folder names sort by timestamp.
-    preview=True sends only the first image of each run (list thumbnails)."""
+    """Page of past runs, newest first; preview=True sends one image each."""
     from PIL import Image
     from server.protocol import image_to_raw
     folders = _run_folders()
@@ -92,8 +90,8 @@ def _history_msg(offset, limit, preview=False):
             with Image.open(f) as im:  # else the handle lives until GC
                 images.append(image_to_raw(im))
         if images:
-            # offset = absolute folder index: runs without images are
-            # skipped, so a list position is not a valid server offset
+            # absolute folder index: imageless runs are skipped, so a list
+            # position is not a valid server offset
             runs.append({"name": folder.name, "offset": pos,
                          "mode": meta.get("mode", "?"),
                          "prompt": meta.get("prompt", ""),
@@ -115,18 +113,13 @@ def _register_default_models():
 
 
 def _run(req, on_progress, on_stage):
-    """Blocking generation + postprocess. Runs in the GPU worker thread.
-
-    The bar fills 0..1 over the diffusion steps; VAE decode and postprocess
-    run after that and are reported as stage labels, not bar movement.
-    """
+    """Blocking generation + postprocess. Runs in the GPU worker thread."""
     def gen_progress(v):
         on_progress(v)
-        if v >= 0.999:  # last step done; decode runs next inside the pipe call
+        if v >= 0.999:  # decode runs next, inside the pipe call
             on_stage("Decoding images")
     if req.mode in ("instruct", "edit"):
-        # Both are instruction edits on Klein; they differ only in the panel
-        # UI (view presets vs a free prompt).
+        # same Klein edit; they differ only in the panel UI
         pipe = models.get("klein", on_stage=on_stage)
         raw = pipe.edit_by_instruction(req.prompt, req.frames[0].image,
                                        variants=req.variants,
@@ -145,10 +138,8 @@ def _run(req, on_progress, on_stage):
                            on_progress=gen_progress)
         palette_src = req.frames[0].image
 
-    # Order matters: strip the background at full resolution first (high
-    # contrast, thick outlines - flood fill is reliable there), THEN shrink.
-    # Doing it after the palette snap let the flood eat subject pixels that
-    # snapped to near-background colors.
+    # strip background at full res BEFORE shrinking: after the palette snap
+    # the flood ate subject pixels that snapped near background colors
     pal = sprite_palette(palette_src) if palette_src is not None else None
     out = []
     on_stage(f"Post-processing 0/{len(raw)}")
@@ -179,16 +170,12 @@ async def handle_request(ws, req):
     loop = asyncio.get_running_loop()
 
     def send(msg):
-        # Called from the GPU worker thread.  If the client is gone (Cancel
-        # closes the socket), abort the job instead of burning GPU time.
+        # runs in the GPU worker thread; a closed socket means Cancel
         if getattr(ws, "close_code", None) is not None:
             raise JobCancelled()
         f = asyncio.run_coroutine_threadsafe(ws.send(msg), loop)
-        # Wait for the send: blocking here hands the GIL to the loop, which
-        # delivers progress sooner than fire-and-forget. Measured over a
-        # GIL-bound worker, dropping the wait was never faster and up to 2x
-        # slower end to end. (Ordering is NOT the reason - it holds either
-        # way: websockets sends in schedule order.)
+        # blocking hands the GIL to the loop: measured up to 2x faster
+        # delivery than fire-and-forget (ordering holds either way)
         try:
             f.result(5)
         except Exception as e:
@@ -246,8 +233,7 @@ async def _handler(ws):
 
 
 def _preload_klein():
-    """Warm the model in the GPU worker at startup instead of on the first
-    prompt. A request arriving mid-load queues behind it, same as before."""
+    """Warm the model at startup; a request arriving mid-load queues behind."""
     def done(f):
         if f.exception():
             log.error("klein preload failed: %r", f.exception())
@@ -260,14 +246,11 @@ async def serve(host="127.0.0.1", port=8765, stop=None, on_ready=None,
                 preload=False):
     if not models._factories:
         _register_default_models()
-    # Model load / generation hog the GIL in the worker thread; a shorter
-    # switch interval keeps the loop answering pings meanwhile.
+    # GIL-heavy worker; a short switch interval keeps pings answered
     sys.setswitchinterval(0.001)
     if preload:
         _preload_klein()
-    # no keepalive pings: GIL-heavy generation starves the loop and the 20s
-    # ping timeout used to kill the socket mid-job (localhost: TCP close is
-    # enough to detect a dead client)
+    # no keepalive: the 20s ping timeout killed sockets mid-job
     async with websockets.serve(_handler, host, port, max_size=64 * 2**20,
                                 ping_interval=None):
         log.info("SpriteForge server on ws://%s:%s", host, port)

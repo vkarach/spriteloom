@@ -9,15 +9,8 @@ def downscale(img: Image.Image, target_size: tuple[int, int],
               palette: list[tuple[int, int, int]] | None = None,
               dark_share: float = 0.15, dark_gap: int = 35
               ) -> Image.Image:
-    """Palette-majority downscale: each opaque pixel votes for its nearest
-    palette color, the cell takes the winner. Unlike a median this never
-    invents in-between colors, so outlines survive. A cell stays opaque
-    when at least `keep` of its pixels are opaque.
-
-    Outline preservation: a palette color at least `dark_gap` luminance
-    darker than the majority winner takes the cell with only a `dark_share`
-    minority - thin dark lines land as split minorities across neighboring
-    cells and would otherwise vanish into speckles."""
+    """Each opaque pixel votes for its nearest palette color; the cell takes
+    the winner, so no in-between colors are invented and outlines survive."""
     tw, th = target_size
     arr = np.asarray(img.convert("RGBA"))
     h, w = arr.shape[:2]
@@ -40,6 +33,8 @@ def downscale(img: Image.Image, target_size: tuple[int, int],
     total = np.bincount(cell, minlength=tw * th)
     opq = votes.sum(1)
 
+    # a much darker minority color wins the cell: thin outlines split across
+    # neighboring cells and would otherwise vanish into speckles
     winner = votes.argmax(1)
     lum = pal @ np.float32([0.299, 0.587, 0.114])
     need = np.maximum(1, (dark_share * opq).astype(np.int32))
@@ -63,9 +58,7 @@ def _used_colors(q: Image.Image, max_colors: int) -> list[tuple[int, int, int]]:
 
 
 def mirror_symmetry(img: Image.Image) -> Image.Image:
-    """Mirror the left half onto the right (center column kept for odd
-    widths). For front/back views this guarantees symmetric features -
-    a standard pixel-art technique."""
+    """Mirror the left half onto the right; odd widths keep the center."""
     arr = np.asarray(img.convert("RGBA")).copy()
     h, w = arr.shape[:2]
     half = w // 2
@@ -74,9 +67,8 @@ def mirror_symmetry(img: Image.Image) -> Image.Image:
 
 
 def crop_to_subject(img: Image.Image, margin: float = 0.04) -> Image.Image:
-    """Crop a background-removed image to its opaque bounding box (plus a
-    small margin) so the subject, not the empty canvas, gets the pixels
-    after downscaling."""
+    """Crop to the opaque bounding box so the subject, not the empty canvas,
+    gets the pixels after downscaling."""
     arr = np.asarray(img.convert("RGBA"))
     ys, xs = np.nonzero(arr[:, :, 3])
     if len(xs) == 0:
@@ -105,9 +97,8 @@ def fit_into(img: Image.Image, target_size: tuple[int, int],
 
 
 def subject_palette(img: Image.Image, max_colors: int = 16) -> list[tuple[int, int, int]]:
-    """Median-cut palette from OPAQUE pixels only. On background-removed
-    images this spends every palette slot on the subject instead of wasting
-    most of them on background shades."""
+    """Median-cut palette from opaque pixels only, so every slot goes to the
+    subject rather than to background shades."""
     arr = np.asarray(img.convert("RGBA"))
     opaque = arr[arr[:, :, 3] > 0][:, :3]
     if len(opaque) == 0:
@@ -142,15 +133,8 @@ def snap_to_palette(img: Image.Image, palette: list[tuple[int, int, int]]) -> Im
 def remove_background(img: Image.Image, tolerance: int = 12,
                       force: bool = False, step_tol: int = 10
                       ) -> Image.Image:
-    """Flood-fill from border pixels matching the dominant border color;
-    reached pixels become transparent, enclosed regions are kept.
-
-    A second pass grows the cleared region through smooth gradients (drop
-    shadows, wall vignettes): a pixel is eaten when it differs from an
-    already-cleared neighbor by at most `step_tol` per channel and stays
-    within 5x tolerance of the background color. Sharp subject outlines
-    stop the growth. Reverted when under 60% of the border ends up cleared
-    (no dominant background), unless `force` is set."""
+    """Flood-fill the dominant border color to transparent, keeping enclosed
+    regions; reverted under 60% border coverage unless `force`."""
     arr = np.asarray(img.convert("RGBA")).astype(int).copy()
     h, w = arr.shape[:2]
     border = np.concatenate([arr[0, :, :3], arr[-1, :, :3],
@@ -169,9 +153,8 @@ def remove_background(img: Image.Image, tolerance: int = 12,
 
     rgb = arr[:, :, :3]
     near_bg = np.abs(rgb - bg).max(axis=2) <= 5 * tolerance
-    # per-direction smooth steps, precomputed once: smooth[k][y, x] is True
-    # when pixel (y, x) is a gentle continuation of its neighbor opposite
-    # to shift k
+    # grow through smooth gradients (drop shadows, vignettes); sharp
+    # subject outlines stop it
     shifts = ((1, 0), (-1, 0), (0, 1), (0, -1))
     smooth = []
     for dy, dx in shifts:
@@ -200,13 +183,8 @@ def remove_background(img: Image.Image, tolerance: int = 12,
         return img.convert("RGBA")  # no dominant background color detected
     arr[cleared, 3] = 0
 
-    # debris pass: leftover scraps pinned to the border (floor contact
-    # lines, shadow slivers) are background, not subject. Two kinds:
-    # small isolated components, and thin appendages of the silhouette
-    # (opening strips anything under ~5px thick) that run into the border.
-    # shadings of the background (same chromaticity, darker/lighter - floor
-    # shadows, wall vignettes): reachable ones get eaten by the flood below;
-    # enclosed pockets and anything behind an outline stay
+    # debris pass: scraps pinned to the border (contact lines, shadow
+    # slivers) are background - drop small components and thin appendages
     rgbf = arr[:, :, :3].astype(np.float64)
     bgf = bg.astype(np.float64)
     norm = bgf @ bgf

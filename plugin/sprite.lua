@@ -43,9 +43,8 @@ function S.exportMask()
   local img = Image(spr.width, spr.height)
   local white = Color{ r = 255, g = 255, b = 255 }
   img:clear(Color{ r = 0, g = 0, b = 0 })
-  -- Only the selection's bounding box can be white, so testing the whole
-  -- canvas is wasted work: a small selection on a 512px sprite went from
-  -- 262144 contains() calls to a few thousand, on Aseprite's UI thread.
+  -- only the bounding box can be white; scanning the whole canvas cost
+  -- 262144 contains() calls on Aseprite's UI thread
   local b = sel.bounds
   local x0, y0 = math.max(0, b.x), math.max(0, b.y)
   local x1 = math.min(spr.width - 1, b.x + b.width - 1)

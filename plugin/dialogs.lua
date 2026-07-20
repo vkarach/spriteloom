@@ -1,12 +1,5 @@
--- SpriteForge control panel. Results, history, prompt assembly, theme
--- drawing and sprite IO live in their own modules.
---
--- Hard-learned rules for Aseprite dialogs:
---  * dynamic text lives on a canvas (repaint does not relayout the dialog);
---  * after anything that can shrink/close a window, call app.refresh() to
---    repaint the vacated screen area, or a ghost strip stays behind.
+-- SpriteForge control panel; see ui.lua for the Aseprite dialog rules.
 local pluginDir = ...
--- Modules take pluginDir as their argument, so they can load each other.
 local function moduleFrom(name)
   return assert(loadfile(app.fs.joinPath(pluginDir, name)))(pluginDir)
 end

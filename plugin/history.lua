@@ -1,6 +1,5 @@
--- History windows: the list of past runs and a single run's variants.
--- The two are mutually recursive (a run's Back reopens the list), so they
--- live together.
+-- History windows; the list and the run view are mutually recursive, so
+-- they live together.
 local pluginDir = ...
 local ui = dofile(app.fs.joinPath(pluginDir, "ui.lua"))
 local sprite = assert(loadfile(

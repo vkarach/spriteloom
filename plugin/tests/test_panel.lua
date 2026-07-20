@@ -1,7 +1,5 @@
--- Loads every plugin module against a stubbed Aseprite API and drives the
--- panel's canvas painters in each server/job state. Catches load-time and
--- paint-time errors (nil arithmetic, missing module fields) without Aseprite.
--- Run with `lua plugin/tests/test_panel.lua` from the repo root.
+-- Loads every module against a stubbed Aseprite API and drives the panel's
+-- painters in each server state. Run from the repo root.
 
 local failures = 0
 local function check(what, ok, err)
@@ -46,9 +44,7 @@ end })
 Timer = nil       -- panel must survive a build without timers
 WebSocketMessageType = { OPEN = 0, TEXT = 1, CLOSE = 2 }
 
--- Scripted socket: REPLY is what the server "answers" on connect, so a test
--- can walk the panel through checking / online / warming. nil = silence,
--- which leaves the panel in the state it opens in.
+-- REPLY is what the server "answers" on connect; nil = silence
 REPLY = nil
 WebSocket = setmetatable({}, { __call = function(_, t)
   local ws = { close = function() end, sendText = function() end }
@@ -218,9 +214,7 @@ do
   app.sprite = nil
 end
 
--- Drive the panel: open it under each server reply, then repaint the status
--- canvas in every task mode. The panel keeps its state in closures, so the
--- server reply at open time is what selects the painter branch.
+-- State lives in closures, so the reply at open time selects the branch.
 local D = assert(loadfile("plugin/dialogs.lua"))("plugin")
 
 local scenarios = {
