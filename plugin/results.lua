@@ -48,9 +48,8 @@ function R.showGrid(opts)
       dlg:repaint()
     end,
   }
-  -- Close first, Copy seed last: after picking a variant, copying its seed is
-  -- the primary action, so it sits at the right.
-  dlg:button{ text = "Close" }
+  -- Copy seed sits just left of Close (the primary post-pick action); Close
+  -- stays last, matching the main panel and History.
   if opts.onBack then
     dlg:button{ text = "< Back", onclick = function()
       dlg:close()
@@ -62,6 +61,7 @@ function R.showGrid(opts)
       dlg:modify{ id = "copyseed", text = "Copied" }
     end
   end }
+  dlg:button{ text = "Close" }
   dlg:show{ wait = true }
   app.refresh()
 end

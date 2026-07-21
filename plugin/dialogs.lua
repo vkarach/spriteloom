@@ -18,8 +18,8 @@ local last = { mode = "Generate", prompt = "", w = nil, h = nil,
                variants = 4, background = "Auto", seed = "",
                palette = "Auto", palfile = "",
                view = "Side view (right)", subject = "character",
-               instruction = "", symmetry = false,
-               genView = "3/4 view", genSubject = "", genDetails = "" }
+               symmetry = false, extra = "",
+               genView = "3/4 view", genSubject = "" }
 
 local PALETTE_OPTS = { "Auto", "Current palette", "Selected colors",
                        "Palette file" }
@@ -42,12 +42,15 @@ local function showAdvanced()
           filename = last.palfile, filetypes = PAL_FILETYPES,
           visible = last.palette == "Palette file" }
   a:entry{ id = "seed", label = "Seed:", text = last.seed or "" }
+  -- appended to the prompt for Generate and Instruct; other modes ignore it
+  a:entry{ id = "extra", label = "Extra:", text = last.extra or "" }
   a:separator{}
   a:button{ id = "ok", text = "OK", focus = true, onclick = function()
     last.background = a.data.background
     last.palette = a.data.palette
     last.palfile = a.data.palfile
     last.seed = a.data.seed
+    last.extra = a.data.extra
     a:close()
   end }
   a:button{ text = "Cancel", onclick = function() a:close() end }
@@ -170,7 +173,7 @@ function D.open()
       return { true, 'Will send: "' .. text .. '"' }
     end
     if m == "Generate" then
-      local text = P.assembleGenPrompt(d.genView, d.genSubject, d.genDetails)
+      local text = P.assembleGenPrompt(d.genView, d.genSubject, last.extra)
       reqs[1] = text and willSend(text)
         or { false, "Subject describes what to generate" }
       -- a cleared number field reads as 0, which the server rejects
@@ -186,7 +189,7 @@ function D.open()
       reqs[3] = { d.prompt ~= "", "Prompt describes the region content" }
     else -- Rotate / Instruct
       reqs[1] = { spr ~= nil, "A sprite is open" }
-      local text = P.assembleInstruction(d.viewPreset, d.subject, d.instruction)
+      local text = P.assembleInstruction(d.viewPreset, d.subject, last.extra)
       reqs[2] = text and willSend(text)
         or { false, "Pick a view preset or type an instruction" }
     end
@@ -230,12 +233,10 @@ function D.open()
     dlg:modify{ id = "h", visible = m == "Generate" }
     dlg:modify{ id = "genView", visible = m == "Generate" }
     dlg:modify{ id = "genSubject", visible = m == "Generate" }
-    dlg:modify{ id = "genDetails", visible = m == "Generate" }
     dlg:modify{ id = "prompt",
                 visible = m == "Edit with AI" or m == "Inpaint Selection" }
     dlg:modify{ id = "viewPreset", visible = instruct }
     dlg:modify{ id = "subject", visible = instruct }
-    dlg:modify{ id = "instruction", visible = instruct }
     dlg:modify{ id = "symmetry", visible = instruct }
     pinDown()
     updateHint()
@@ -285,25 +286,24 @@ function D.open()
         return
       end
       local instruction = P.assembleInstruction(d.viewPreset, d.subject,
-                                                d.instruction)
+                                                last.extra)
       if not instruction then
         setState("error", "Pick a view preset or type an instruction.")
         return
       end
       last.view = d.viewPreset; last.subject = d.subject
-      last.instruction = d.instruction; last.symmetry = d.symmetry
+      last.symmetry = d.symmetry
       payload.prompt = instruction
       payload.symmetry = d.symmetry
       payload.target_size = { spr.width, spr.height }
       payload.frames = { { image = sprite.exportFrame() } }
     elseif mode == "generate" then
-      local text = P.assembleGenPrompt(d.genView, d.genSubject, d.genDetails)
+      local text = P.assembleGenPrompt(d.genView, d.genSubject, last.extra)
       if not text then
         setState("error", "Subject is empty.")
         return
       end
       last.genView = d.genView; last.genSubject = d.genSubject
-      last.genDetails = d.genDetails
       payload.prompt = text
       payload.target_size = { d.w, d.h }
     else
@@ -534,8 +534,6 @@ function D.open()
   dlg:entry{ id = "genSubject", label = "Subject:", text = last.genSubject,
              focus = true, onchange = updateHint,
              visible = last.mode == "Generate" }
-  dlg:entry{ id = "genDetails", label = "Extra:", text = last.genDetails,
-             onchange = updateHint, visible = last.mode == "Generate" }
   dlg:entry{ id = "prompt", label = "Prompt:", text = last.prompt,
              onchange = updateHint,
              visible = last.mode == "Edit with AI"
@@ -545,9 +543,6 @@ function D.open()
                 visible = last.mode == "Rotate / Instruct" }
   dlg:entry{ id = "subject", label = "Subject:", text = last.subject,
              onchange = updateHint,
-             visible = last.mode == "Rotate / Instruct" }
-  dlg:entry{ id = "instruction", label = "Extra:",
-             text = last.instruction, onchange = updateHint,
              visible = last.mode == "Rotate / Instruct" }
   dlg:check{ id = "symmetry", text = "Mirror symmetry (front/back views)",
              selected = last.symmetry,
@@ -564,7 +559,8 @@ function D.open()
   dlg:separator{ text = "Options" }
   dlg:slider{ id = "variants", label = "Variants:", min = 1, max = 8,
               value = last.variants }
-  dlg:button{ id = "advbtn", text = "Advanced...", onclick = showAdvanced }
+  dlg:button{ id = "advbtn", text = "Advanced...",
+              onclick = function() showAdvanced(); updateHint() end }
   dlg:separator{ text = "Status" }
   dlg:canvas{
     id = "view", width = STATUS_W, height = STATUS_H,
