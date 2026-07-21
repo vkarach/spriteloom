@@ -4,6 +4,8 @@ local pluginDir = ...
 local ui = dofile(app.fs.joinPath(pluginDir, "ui.lua"))
 local sprite = assert(loadfile(
   app.fs.joinPath(pluginDir, "sprite.lua")))(pluginDir)
+local results = assert(loadfile(
+  app.fs.joinPath(pluginDir, "results.lua")))(pluginDir)
 
 local H = {}
 
@@ -11,66 +13,34 @@ local histMode = "list"  -- "list" | "grid"; kept across reopenings
 
 local showHistory  -- forward declaration: showRun's Back button reopens it
 
--- One past run: grid of its variants, click to insert (like Results).
+-- One past run. Load its variants first, THEN open a window sized to the grid
+-- (a canvas made before the images arrive can only guess its size, and
+-- Aseprite then stretches it).
 local function showRun(client, offset)
-  local run, imgs, inserted = nil, {}, {}
-  local status = "Loading run..."
-  local CW, HEAD = 600, 34
-  local CH = 360 + HEAD
-
-  local dlg = Dialog("SpriteForge - History run (click to insert / remove)")
-  local setSeed
-  local function grid() return ui.gridLayout(imgs, CW, CH - HEAD) end
-
   client.history(offset, 1, false, function(msg)
-    run = msg.runs[1]
-    if run then
-      for n, s in ipairs(run.images) do
-        imgs[n] = sprite.imageFromPayload(s, "h" .. n)
-      end
-      status = nil
-    else
-      status = "This run has no images."
+    local run = msg.runs[1]
+    if not run or not run.images or #run.images == 0 then
+      ui.message("This run has no images.")
+      showHistory(client)
+      return
     end
-    dlg:repaint()
+    local imgs = {}
+    for n, s in ipairs(run.images) do
+      imgs[n] = sprite.imageFromPayload(s, "h" .. n)
+    end
+    results.showGrid{
+      title = "SpriteForge - Run (click a variant to insert)",
+      imgs = imgs, seeds = run.seeds, prefix = "SpriteForge H",
+      headers = {
+        { text = run.mode .. "   " .. ui.runWhen(run.name) },
+        { text = run.prompt, dim = true },
+      },
+      onBack = function() showHistory(client) end,
+    }
   end, function(err)
-    status = err
-    dlg:repaint()
-  end)
-
-  dlg:canvas{
-    id = "hgrid", width = CW, height = CH,
-    onpaint = function(ev)
-      local gc = ev.context
-      local text = ui.text()
-      gc.color = ui.face()
-      gc:fillRect(Rectangle(0, 0, CW, CH))
-      gc.color = text
-      if status then
-        gc:fillText(status, 8, 8)
-        return
-      end
-      gc:fillText(run.mode .. "   " .. ui.runWhen(run.name), 8, 4)
-      gc.color = ui.shade(text, 0.75)
-      gc:fillText(ui.ellipsize(run.prompt, 92), 8, 18)
-      ui.drawVariants(gc, imgs, grid(), inserted, HEAD)
-    end,
-    onmouseup = function(ev)
-      if status then return end
-      local n = ui.variantAt(ev, grid(), imgs, HEAD)
-      if not n then return end
-      sprite.toggleVariant(inserted, n, imgs[n], "SpriteForge H")
-      setSeed(ui.seedText(run and run.seeds, n))
-    end,
-  }
-  setSeed = ui.seedRow(dlg, CW)
-  dlg:button{ text = "< Back", onclick = function()
-    dlg:close()
+    ui.message(err or "Could not load the run.")
     showHistory(client)
-  end }
-  dlg:button{ text = "Close" }
-  dlg:show{ wait = true }
-  app.refresh()
+  end)
 end
 
 -- Scrollable past runs (newest first); wheel scrolls, click opens the run.

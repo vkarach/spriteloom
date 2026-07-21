@@ -207,19 +207,17 @@ do
     app.clipboard.text = ""
     local ok4, e = pcall(R.showResults, imgs, seeds, function() end)
     check("results window opens (" .. #seeds .. " seeds)", ok4, e)
-    local grid, seedbar, copy
+    local grid, copy
     for _, w in ipairs(lastDialog.widgets) do
       if w.kind == "canvas" and w.spec.id == "grid" then grid = w.spec end
-      if w.kind == "canvas" and w.spec.id == "seedbar" then seedbar = w.spec end
       if w.kind == "button" and w.spec.id == "copyseed" then copy = w.spec end
     end
-    check("results window has grid + seed canvases and a copy button",
-          grid and seedbar and copy, "")
+    check("results window has a grid canvas and a copy button",
+          grid and copy, "")
     if grid then
+      -- onpaint draws both the variants and the seed footer
       local painted, e5 = pcall(grid.onpaint, { context = stubGC() })
       check("results window paints", painted, e5)
-      local sp, e7 = pcall(seedbar.onpaint, { context = stubGC() })
-      check("results seed bar paints", sp, e7)
       local clicked, e6 = pcall(grid.onmouseup, { x = 3, y = 3 })
       check("results window handles a click", clicked, e6)
       pcall(copy.onclick)

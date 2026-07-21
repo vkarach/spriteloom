@@ -121,6 +121,14 @@ function U.seedText(seeds, n)
   return string.format("%d", math.floor(s))
 end
 
+-- Tiny modal note (empty runs, load errors).
+function U.message(text)
+  local d = Dialog("SpriteForge")
+  d:label{ text = text }
+  d:button{ text = "OK", focus = true, onclick = function() d:close() end }
+  d:show{ wait = true }
+end
+
 -- Put text on the OS clipboard; false if this Aseprite build has no API.
 function U.copyText(s)
   return pcall(function() app.clipboard.text = s end)
@@ -132,43 +140,21 @@ function U.runWhen(name)
   return y4 and string.format("%s-%s-%s %s:%s", y4, mo, dd, hh, mi) or ""
 end
 
--- Non-editable seed footer: a full-width boxed canvas (fixed size, so no
--- relayout/ghost) with the value centered, plus a Copy button. newrow forces
--- each onto its own row, else a label-less canvas packs beside the grid and
--- doubles the window width. Returns setSeed(str).
-function U.seedRow(dlg, width)
-  local current = ""
-  local HGT = 22
-  dlg:newrow{ always = true }
-  dlg:canvas{
-    id = "seedbar", width = width, height = HGT,
-    onpaint = function(ev)
-      local gc = ev.context
-      local face = U.face()
-      gc.color = U.shade(face, 0.72)
-      gc:fillRect(Rectangle(0, 0, width, HGT))
-      gc.color = U.shade(face, 0.93)
-      gc:fillRect(Rectangle(1, 1, width - 2, HGT - 2))
-      gc.color = U.text()
-      local text = current ~= "" and ("Seed: " .. current)
-                   or "Seed: click a variant to copy"
-      local tw = #text * 6
-      local ok, size = pcall(function() return gc:measureText(text) end)
-      if ok and size then tw = size.width end
-      gc:fillText(text, math.max(4, (width - tw) // 2), 6)
-    end,
-  }
-  dlg:newrow{ always = true }
-  dlg:button{ id = "copyseed", text = "Copy seed", onclick = function()
-    if current ~= "" and U.copyText(current) then
-      dlg:modify{ id = "copyseed", text = "Copied" }
-    end
-  end }
-  return function(str)
-    current = str or ""
-    dlg:modify{ id = "copyseed", text = "Copy seed" }
-    dlg:repaint()
-  end
+-- Draw the seed as a boxed footer strip INSIDE a grid canvas, so there is no
+-- separate widget to pack beside the grid (which doubled the window width).
+function U.drawSeedBar(gc, seed, x, y, w, h)
+  local face = U.face()
+  gc.color = U.shade(face, 0.72)
+  gc:fillRect(Rectangle(x, y, w, h))
+  gc.color = U.shade(face, 0.93)
+  gc:fillRect(Rectangle(x + 1, y + 1, w - 2, h - 2))
+  gc.color = U.text()
+  local text = (seed and seed ~= "") and ("Seed: " .. seed)
+               or "Seed: click a variant to copy"
+  local tw = #text * 6
+  local ok, size = pcall(function() return gc:measureText(text) end)
+  if ok and size then tw = size.width end
+  gc:fillText(text, x + math.max(4, (w - tw) // 2), y + (h - 10) // 2)
 end
 
 function U.ellipsize(text, limit)
