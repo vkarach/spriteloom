@@ -188,8 +188,9 @@ def remove_background(img: Image.Image, tolerance: int = 12,
     rgbf = arr[:, :, :3].astype(np.float64)
     bgf = bg.astype(np.float64)
     norm = bgf @ bgf
-    if norm == 0:  # black has no chromaticity ray; only black is its shade
-        shade = rgbf.max(axis=2) <= tolerance
+    lum_bg = bgf @ np.float64([0.299, 0.587, 0.114])
+    if lum_bg < 220:  # dark/mid bg: a darker shade is a subject, not a shadow
+        shade = np.abs(rgbf - bgf).max(axis=2) <= tolerance
     else:
         # a cast shadow keeps the bg hue exactly; a dark tinted subject (navy
         # suit on gray) does not, so the chroma bound is tight, not tolerance

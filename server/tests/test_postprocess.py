@@ -304,6 +304,19 @@ def test_remove_background_keeps_dark_tinted_subject_on_gray():
     assert out.getpixel((20, 20)) == (30, 30, 45, 255)
 
 
+def test_remove_background_keeps_gray_subject_on_gray_bg():
+    # gray metal subject on a mid-gray bg: both neutral, so the chromaticity
+    # ray would call the subject a cast shadow. a mid-gray bg is too dark for
+    # that test to be trustworthy - keep the subject (real torch-body bug)
+    img = Image.new("RGBA", (40, 40), (171, 172, 177, 255))
+    for x in range(12, 28):
+        for y in range(8, 34):
+            img.putpixel((x, y), (133, 137, 139, 255))
+    out = remove_background(img, tolerance=16)
+    assert out.getpixel((0, 0))[3] == 0                  # bg cleared
+    assert out.getpixel((20, 20)) == (133, 137, 139, 255)  # gray subject kept
+
+
 def test_downscale_dark_minority_outline_wins_cell():
     # 8x8 cell: 12/64 dark outline pixels (~19%) - majority vote alone
     # would drop the line, the dark bias keeps it
