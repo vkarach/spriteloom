@@ -6,6 +6,7 @@ import threading
 import webview
 
 from launcher import plugin_install, server_proc
+from launcher.paths import app_root
 from server.config import (HOST, VRAM_MODES, load_port, load_vram_mode,
                            save_port, save_vram_mode)
 
@@ -27,12 +28,6 @@ NO_VENV = ("No .venv found in {root}. "
 # object to expose it, and walking a Window recurses through
 # native.AccessibilityObject until the UI thread is wedged.
 _window = None
-
-
-def app_root() -> pathlib.Path:
-    if getattr(sys, "frozen", False):
-        return pathlib.Path(sys.executable).parent
-    return pathlib.Path(__file__).resolve().parent.parent
 
 
 def ui_file() -> str:
