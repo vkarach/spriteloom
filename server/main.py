@@ -280,6 +280,12 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     # The panel pings every 10s; websockets logs every open/close at INFO.
     logging.getLogger("websockets").setLevel(logging.WARNING)
+    # Benign on Windows: torchao has no Triton wheel, torch.distributed cannot
+    # redirect stdio. Both warn once at import; silence before torch loads.
+    logging.getLogger("torchao").setLevel(logging.ERROR)
+    logging.getLogger(
+        "torch.distributed.elastic.multiprocessing.redirects"
+    ).setLevel(logging.ERROR)
     try:
         asyncio.run(serve(host=HOST, port=load_port(), preload=True))
     except KeyboardInterrupt:
