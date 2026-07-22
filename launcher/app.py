@@ -110,28 +110,23 @@ class Api:
     def state(self) -> dict:
         return self._snapshot()
 
-    def fit(self, delta: int) -> None:
-        """Grow or shrink to the page's own height; delta comes from the page.
+    def relayout(self, delta: int, wide: bool) -> None:
+        """Set width and height in one resize so neither flashes on its own.
 
-        The page is the only one that knows how tall it is once the log is
-        open, a hint has appeared, or the screen changed, so it measures and
-        we follow. Width never changes, MIN_HEIGHT is the floor.
+        The page measures its own height (delta from the current inner height)
+        and says whether it wants the wide install view; both changes land in
+        a single resize so the window never shows a narrow-but-tall frame.
         """
-        if not _window or not delta:
+        if not _window:
             return
+        want_w = WIDE_WIDTH if wide else WIDTH
         cap = int(_screen_height() * MAX_SCREEN_FRACTION)
-        target = min(max(MIN_HEIGHT, self.height + int(delta)), cap)
-        if target != self.height:
-            self.height = target
-            _window.resize(self.width, target)
-
-    def set_wide(self, on: bool) -> None:
-        """Widen for the two-column install view, narrow back afterwards."""
-        want = WIDE_WIDTH if on else WIDTH
-        if not _window or want == self.width:
+        target_h = min(max(MIN_HEIGHT, self.height + int(delta)), cap)
+        if want_w == self.width and target_h == self.height:
             return
-        self.width = want
-        _window.resize(want, self.height)
+        self.width = want_w
+        self.height = target_h
+        _window.resize(want_w, target_h)
 
     def toggle_server(self) -> dict:
         if self.proc.is_alive():
@@ -302,8 +297,11 @@ class Api:
     def _snapshot(self) -> dict:
         tone, label, progress = self._server_view()
         text, warn, action = self._plugin_view()
+        cold = any(item["required"] and item["state"] != setup_checks.OK
+                   for item in self.items)
         return {
             "version": VERSION,
+            "cold": cold,
             "url": f"ws://{HOST}:{self.port}",
             "tone": tone,
             "label": label,

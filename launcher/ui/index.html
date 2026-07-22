@@ -11,6 +11,8 @@
     --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   }
   * { box-sizing: border-box; }
+  /* paint the whole surface so a mid-resize gap is dark, not see-through */
+  html { background: var(--bg); }
   /* WebView2 ships the light system scrollbar; repaint it for the dark panel */
   * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -70,17 +72,24 @@
   }
   #backbtn { width: auto; margin: 0; padding: 6px 13px; font-size: 12.5px;
              font-weight: 400; letter-spacing: 0.02em; }
-  /* install log rides in a second column when the window is wide */
+  /* install log rides in a second column; layout follows the real window
+     width so a class toggle never lays out two columns in a narrow window */
   .setup-side { display: none; }
   .setup-side .head {
     color: var(--ink-dim); font-size: 12px; letter-spacing: 0.06em;
     margin-bottom: 8px;
   }
   .setup-side pre { margin: 0; height: auto; min-height: 360px; }
-  body.wide .setup-body {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;
+  @media (min-width: 700px) {
+    .setup-body {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      align-items: start;
+    }
+    .setup-side { display: block; }
   }
-  body.wide .setup-side { display: block; }
+  /* PATHS collapses so long paths do not stretch the screen */
+  #pathsbox summary { color: var(--ink-dim); letter-spacing: 0.06em; }
+  #pathsbox[open] summary { margin-bottom: 4px; }
   .prow .reset { padding: 4px 9px; font-size: 13px; line-height: 1; }
   .screen-title {
     margin-left: 12px; font-family: var(--mono); font-weight: 700;
@@ -250,10 +259,10 @@
         <button id="installbtn" disabled>INSTALL SELECTED</button>
       </div>
 
-      <div class="card">
-        <div class="head">PATHS</div>
+      <details class="card" id="pathsbox">
+        <summary>PATHS</summary>
         <div id="setuppaths"></div>
-      </div>
+      </details>
 
       <div class="card">
         <div class="opt">
@@ -296,6 +305,10 @@
     $("plug").className = s.plugin_warn ? "ver warn" : "ver";
     $("install").textContent = s.plugin_action;
     $("install").disabled = busy;
+    // glow the moment the background check finds something missing, no click;
+    // only rewrite when it changes so the animation never restarts mid tick
+    const setupCls = "ghost" + (s.cold ? " cold" : "");
+    if ($("setupbtn").className !== setupCls) $("setupbtn").className = setupCls;
     // never yank the list out from under an open dropdown
     if (document.activeElement !== $("vram")) $("vram").value = s.vram_mode;
 
@@ -332,16 +345,16 @@
   const chosen = new Set();
   let onSetup = false;
   let installing = false;
-  let wide = false;
+  let wantWide = false;
   let lastRunning = false;
   let noteTimer = 0;
 
-  // the install log lives in a second column; widen the window for it
+  // the install log lives in a second column; ask for the wide window and let
+  // fit() apply width and height in one resize
   function setWide(on) {
-    if (on === wide) return;
-    wide = on;
-    document.body.classList.toggle("wide", on);
-    window.pywebview.api.set_wide(on);
+    if (on === wantWide) return;
+    wantWide = on;
+    fit();
   }
 
   function showNote(msg) {
@@ -371,8 +384,9 @@
     for (const item of s.items) {
       const row = document.createElement("div");
       row.className = "srow " + (item.step_state || item.state);
+      // a failed step keeps its checkbox so you can fix and run it again
       const actionable = item.state !== "ok" && item.state !== "blocked"
-        && !item.step_state;
+        && (!item.step_state || item.step_state === "failed");
       if (actionable && !s.running) {
         const box = document.createElement("input");
         box.type = "checkbox";
@@ -437,9 +451,11 @@
     btn.disabled = !s.running && (s.checking || chosen.size === 0);
 
     const log = $("setuplog");
-    if (log.textContent !== s.log) {
+    // Python reprs a bad path with doubled backslashes; show single
+    const text = s.log.replace(/\\\\/g, "\\");
+    if (log.textContent !== text) {
       const stuck = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
-      log.textContent = s.log;
+      log.textContent = text;
       if (stuck) log.scrollTop = log.scrollHeight;
     }
     // no log until you install: keep the window narrow, widen for the side
@@ -492,11 +508,14 @@
     requestAnimationFrame(() => {
       fitting = false;
       const delta = document.body.scrollHeight - window.innerHeight;
-      if (delta !== 0) window.pywebview.api.fit(delta);
+      const needWidth = (window.innerWidth > 640) !== wantWide;
+      if (delta !== 0 || needWidth)
+        window.pywebview.api.relayout(delta, wantWide);
     });
   }
 
   $("logbox").addEventListener("toggle", fit);
+  $("pathsbox").addEventListener("toggle", fit);
 
   window.addEventListener("pywebviewready", () => {
     tick();
