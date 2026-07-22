@@ -17,7 +17,7 @@ from server.config import HOST
 MAX_LINES = 500
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 # no console window when a windowed exe spawns the server
-_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 _KILL_ON_JOB_CLOSE = 0x2000
 _EXTENDED_LIMIT_INFORMATION = 9
@@ -81,6 +81,12 @@ def make_kill_on_close_job():
         lib.CloseHandle(job)
         return None
     return job
+
+
+def close_job(job) -> None:
+    """Closing the last handle is what kills the tree, so it is worth a name."""
+    if job:
+        _kernel32().CloseHandle(job)
 
 
 def assign_to_job(job, pid: int) -> bool:
@@ -163,7 +169,7 @@ class ServerProcess:
             [self.python, *self.args], cwd=str(self.root),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace",
-            creationflags=_NO_WINDOW)
+            creationflags=NO_WINDOW)
         self.job = make_kill_on_close_job()
         assign_to_job(self.job, self.proc.pid)
         threading.Thread(target=self._pump, daemon=True).start()
@@ -189,7 +195,8 @@ class ServerProcess:
 
     def stop(self) -> None:
         if not self.is_alive():
-            self._close_job()
+            close_job(self.job)
+            self.job = None
             return
         proc = self.proc
         assert proc
@@ -200,9 +207,5 @@ class ServerProcess:
             proc.kill()
             proc.wait(timeout=5)
         # terminate() spares grandchildren; closing the job sweeps them up
-        self._close_job()
-
-    def _close_job(self) -> None:
-        if self.job:
-            _kernel32().CloseHandle(self.job)
-            self.job = None
+        close_job(self.job)
+        self.job = None
