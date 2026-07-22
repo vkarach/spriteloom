@@ -38,6 +38,18 @@
     color: var(--ink-faint); font-weight: 400; margin-left: auto;
     letter-spacing: 0; flex: none;
   }
+  #setupbtn {
+    width: auto; margin: 0 0 0 12px; padding: 6px 13px; font-size: 12.5px;
+    font-weight: 400; letter-spacing: 0.02em; background: transparent;
+    color: var(--ink); border: 1px solid var(--line); flex: none;
+  }
+  #setupbtn:hover:not(:disabled) { border-color: var(--ink-faint); filter: none; }
+  #setupbtn.on { border-color: var(--gold); color: var(--gold); }
+  #setup .head {
+    font-size: 12px; letter-spacing: 0.08em; color: var(--ink-dim);
+    margin-bottom: 4px;
+  }
+  #setup .opt:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
   .hint { overflow-wrap: anywhere; }
   .card {
     margin-top: 16px; background: var(--panel);
@@ -127,7 +139,9 @@
   .hint.bad { color: var(--danger); }
 </style>
 
-<div class="brand"><i></i>SPRITEFORGE<span id="ver"></span></div>
+<div class="brand"><i></i>SPRITEFORGE<span id="ver"></span>
+  <button id="setupbtn" class="ghost">Setup</button>
+</div>
 
 <div class="card">
   <div class="row">
@@ -138,6 +152,10 @@
   <div class="bar" id="bar"><i id="barfill"></i></div>
   <button id="toggle">START</button>
   <div class="hint" id="hint"></div>
+</div>
+
+<div class="card" id="setup" hidden>
+  <div class="head">SETUP</div>
   <div class="opt">
     <label for="vram">VRAM mode</label>
     <select id="vram">
@@ -206,6 +224,13 @@
   $("install").onclick = () => call(window.pywebview.api.install_plugin);
   $("vram").onchange = async () =>
     paint(await window.pywebview.api.set_vram_mode($("vram").value));
+
+  $("setupbtn").onclick = () => {
+    const open = $("setup").hidden;
+    $("setup").hidden = !open;
+    $("setupbtn").className = "ghost" + (open ? " on" : "");
+    fit();
+  };
 
   async function tick() {
     if (busy) return;
