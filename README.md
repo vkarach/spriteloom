@@ -61,7 +61,9 @@ and no cloud option by design — the whole point is that it runs locally.
 
 ## Install
 
-1. Download this repository and run `SpriteForge.exe`.
+1. Download this repository. Put `SpriteForge.exe` in the project root and run
+   it. The exe is not shipped in git: build it once with the command near the
+   end of this section, or copy a prebuilt one next to the repo files.
 2. Press **Setup**. It shows what is missing: the environment, the
    dependencies, PyTorch, the plugin, the model.
 3. Tick what you want and press **Install selected**. It builds the `.venv`,
