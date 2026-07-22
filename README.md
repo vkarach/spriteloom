@@ -61,13 +61,22 @@ and no cloud option by design — the whole point is that it runs locally.
 
 ## Install
 
+1. Download this repository and run `SpriteForge.exe`.
+2. Press **Setup**. It shows what is missing: the environment, the
+   dependencies, PyTorch, the plugin, the model.
+3. Tick what you want and press **Install selected**. It builds the `.venv`,
+   installs the packages and the plugin, and prints a live log. Restart
+   Aseprite once the plugin is in.
+
+The model (~15 GB) is unticked by default; leave it, and the server downloads
+it the first time you run a task, or tick it to fetch it up front.
+
+If you would rather do it by hand:
+
 1. `py -3 -m venv .venv`
 2. `.venv\Scripts\python -m pip install -r server\requirements.txt`
 3. `.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu128`
-4. Run `SpriteForge.exe`, press **Install**, then restart Aseprite.
-   (No exe yet? `install-plugin.bat` does the same thing.)
-
-The model (~15 GB) downloads automatically the first time you run a task.
+4. `install-plugin.bat`, then restart Aseprite.
 
 To build the exe yourself: `.venv\Scripts\python -m pip install -r
 launcher\requirements.txt`, then `.venv\Scripts\python -m PyInstaller
@@ -174,14 +183,19 @@ Layout and ghosting still need a real Aseprite.
 | file | holds |
 |---|---|
 | `launcher/app.py` | the window, the JS bridge, window sizing |
-| `launcher/ui/index.html` | markup and styles |
+| `launcher/ui/index.html` | markup and styles, main and setup screens |
 | `launcher/server_proc.py` | the server subprocess, port probing, health |
 | `launcher/plugin_install.py` | copying the plugin, version comparison |
-| `server/config.py` | the port, shared by the launcher and the server |
+| `launcher/paths.py` | finding the root, Python, Aseprite and the model |
+| `launcher/setup_checks.py` | what the setup is missing, detection only |
+| `launcher/setup_steps.py` | running the install steps in order |
+| `server/config.py` | the settings, shared by the launcher and the server |
 
-The launcher owns the port. It lives in `%APPDATA%\SpriteForge\config.json`,
-defaults to 8765, and **Install** stamps the same value into `server.json`
-next to the installed plugin, so both ends always agree.
+The launcher owns the settings file `%APPDATA%\SpriteForge\config.json`: the
+port, the VRAM mode, and the setup paths all live there, and every write
+merges so one key never erases another. The port defaults to 8765, and
+**Install** stamps it into `server.json` next to the plugin, so both ends
+agree.
 
 The server runs inside a Windows job object that dies with the launcher.
 That is what keeps a crashed or killed launcher from leaving a server behind
