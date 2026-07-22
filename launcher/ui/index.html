@@ -1,0 +1,188 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SpriteForge</title>
+<style>
+  :root {
+    --bg: #14161c; --panel: #20242f; --line: #2c313d;
+    --ink: #d3d7e0; --ink-dim: #8b93a5; --ink-faint: #616a7d;
+    --gold: #f2b23c; --danger: #e8705a; --ok: #6fcf7f;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  /* WebView2 ships the light system scrollbar; repaint it for the dark panel */
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line); border-radius: 5px;
+    border: 2px solid transparent; background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  body {
+    margin: 0; padding: 22px; background: var(--bg); color: var(--ink);
+    font-family: var(--mono); font-size: 13px; line-height: 1.45;
+    user-select: none; -webkit-user-select: none; cursor: default;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 700; letter-spacing: 0.09em; font-size: 14px;
+  }
+  .brand i {
+    width: 10px; height: 10px; background: var(--gold);
+    display: inline-block; box-shadow: 4px 4px 0 0 var(--gold-deep, #d8951f);
+  }
+  .brand span {
+    color: var(--ink-faint); font-weight: 400; margin-left: auto;
+    letter-spacing: 0; flex: none;
+  }
+  .hint { overflow-wrap: anywhere; }
+  .card {
+    margin-top: 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 18px;
+  }
+  .row { display: flex; align-items: center; gap: 11px; }
+  .dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--ink-faint); flex: none;
+  }
+  .dot.busy { background: var(--gold); animation: pulse 1.1s infinite; }
+  .dot.ready { background: var(--ok); }
+  .dot.error { background: var(--danger); }
+  @keyframes pulse { 50% { opacity: 0.22; } }
+  /* at the minimum width long stages and paths wrap instead of colliding */
+  .label { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+  .addr {
+    margin-top: 5px; margin-left: 22px; color: var(--ink-faint);
+    overflow-wrap: anywhere;
+  }
+  .bar {
+    margin-top: 13px; height: 4px; background: var(--line);
+    border-radius: 2px; overflow: hidden; display: none;
+  }
+  .bar.on { display: block; }
+  .bar i {
+    display: block; height: 100%; width: 0; background: var(--gold);
+    transition: width 0.3s;
+  }
+  button {
+    width: 100%; margin-top: 16px; padding: 13px; cursor: pointer;
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+    letter-spacing: 0.09em; color: #14161c; background: var(--gold);
+    border: 0; border-radius: 6px;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.09); }
+  button:disabled {
+    background: var(--line); color: var(--ink-faint); cursor: default;
+  }
+  button.ghost {
+    background: transparent; color: var(--ink); border: 1px solid var(--line);
+    width: auto; margin: 0; padding: 8px 15px; font-weight: 400;
+    letter-spacing: 0.02em; flex: none;
+  }
+  button.ghost:hover:not(:disabled) { border-color: var(--ink-faint); filter: none; }
+  .plugin { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .plugin .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .plugin .ver { color: var(--ink-faint); }
+  .plugin .ver.warn { color: var(--gold); }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--ink-dim); list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: "\25B8"; display: inline-block; width: 9px; margin-right: 9px;
+    color: var(--ink-faint);
+  }
+  details[open] summary::before { content: "\25BE"; }
+  pre {
+    margin: 10px 0 0; padding: 11px; height: 300px; overflow: auto;
+    background: #0f1116; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 11.5px; color: var(--ink-dim); white-space: pre-wrap;
+    word-break: break-word; user-select: text; -webkit-user-select: text;
+  }
+  .hint {
+    margin-top: 13px; color: var(--gold); display: none; font-size: 12.5px;
+  }
+  .hint.on { display: block; }
+  .hint.bad { color: var(--danger); }
+</style>
+
+<div class="brand"><i></i>SPRITEFORGE<span id="ver"></span></div>
+
+<div class="card">
+  <div class="row">
+    <span class="dot" id="dot"></span>
+    <span class="label" id="label">Checking</span>
+  </div>
+  <div class="addr" id="addr"></div>
+  <div class="bar" id="bar"><i id="barfill"></i></div>
+  <button id="toggle">START</button>
+  <div class="hint" id="hint"></div>
+</div>
+
+<div class="card plugin">
+  <div class="txt">Aseprite plugin <span class="ver" id="plug"></span></div>
+  <button class="ghost" id="install">Install</button>
+</div>
+
+<details id="logbox">
+  <summary>Log</summary>
+  <pre id="log"></pre>
+</details>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let busy = false;
+  let sawError = false;
+
+  function paint(s) {
+    $("ver").textContent = s.version;
+    $("addr").textContent = s.url;
+    $("dot").className = "dot " + s.tone;
+    $("label").textContent = s.label;
+    $("toggle").textContent = s.running ? "STOP" : "START";
+    $("toggle").disabled = busy || !s.can_start;
+    $("bar").className = s.progress > 0 ? "bar on" : "bar";
+    $("barfill").style.width = Math.round(s.progress * 100) + "%";
+    $("hint").className = s.hint ? (s.hint_bad ? "hint on bad" : "hint on") : "hint";
+    $("hint").textContent = s.hint || "";
+    $("plug").textContent = s.plugin_text;
+    $("plug").className = s.plugin_warn ? "ver warn" : "ver";
+    $("install").textContent = s.plugin_action;
+    $("install").disabled = busy;
+
+    const log = $("log");
+    if (log.textContent !== s.log) {
+      const stuck = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
+      log.textContent = s.log;
+      if (stuck) log.scrollTop = log.scrollHeight;
+    }
+    // open the log once, the first time something breaks
+    if (s.tone === "error" && !sawError) { sawError = true; $("logbox").open = true; }
+    if (s.tone !== "error") sawError = false;
+  }
+
+  async function call(action) {
+    busy = true;
+    $("toggle").disabled = true;
+    $("install").disabled = true;
+    try { paint(await action()); } finally { busy = false; }
+  }
+
+  $("toggle").onclick = () => call(window.pywebview.api.toggle_server);
+  $("install").onclick = () => call(window.pywebview.api.install_plugin);
+
+  async function tick() {
+    if (busy) return;
+    paint(await window.pywebview.api.state());
+  }
+
+  // the window is compact until the log is shown, then it grows to fit it
+  $("logbox").addEventListener("toggle", () => {
+    window.pywebview.api.set_log_open($("logbox").open);
+  });
+
+  window.addEventListener("pywebviewready", () => {
+    tick();
+    setInterval(tick, 1000);
+  });
+</script>
