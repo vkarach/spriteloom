@@ -274,10 +274,11 @@ async def serve(host="127.0.0.1", port=8765, stop=None, on_ready=None,
 
 
 if __name__ == "__main__":
+    from server.config import HOST, load_port
     logging.basicConfig(level=logging.INFO)
     # The panel pings every 10s; websockets logs every open/close at INFO.
     logging.getLogger("websockets").setLevel(logging.WARNING)
     try:
-        asyncio.run(serve(preload=True))
+        asyncio.run(serve(host=HOST, port=load_port(), preload=True))
     except KeyboardInterrupt:
         log.info("SpriteForge server stopped. Bye.")
