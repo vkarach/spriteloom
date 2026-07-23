@@ -11,10 +11,20 @@ BLOCKED = "blocked"
 
 MODEL_FOLDER = "models--black-forest-labs--FLUX.2-klein-4B"
 MODEL_GB = 15
-DEPS_PROBE = ("import websockets, diffusers, transformers, accelerate, peft, "
-              "bitsandbytes, PIL, numpy, scipy; print('ok')")
-TORCH_PROBE = ("import torch; "
-               "print(torch.version.cuda or 'none', torch.cuda.is_available())")
+# metadata only, not a real import -- importing torch/diffusers costs seconds
+DEPS_PROBE = ("import importlib.metadata as m; "
+              "[m.version(d) for d in ('websockets','diffusers','transformers',"
+              "'accelerate','peft','bitsandbytes','Pillow','numpy','scipy')]; "
+              "print('ok')")
+TORCH_PROBE = "import importlib.metadata as m; print(m.version('torch'))"
+
+
+def _cuda_tag(version):
+    # torch's local version tag carries the CUDA build, e.g. 2.4.1+cu124 -> 12.4
+    if not version or "+cu" not in version:
+        return None
+    digits = "".join(c for c in version.split("+cu", 1)[1] if c.isdigit())
+    return f"{digits[:-1]}.{digits[-1]}" if len(digits) >= 2 else None
 
 
 def _item(item_id, label, state, detail, required=True, needs=()):
@@ -65,8 +75,8 @@ def check_all(paths, run=None) -> list[dict]:
                            OK if got else MISSING,
                            "installed" if got else "missing", needs=["venv"]))
         got = runner([str(interpreter), "-c", TORCH_PROBE])
-        cuda, _, available = (got or "").partition(" ")
-        if got and available.strip() == "True":
+        cuda = _cuda_tag(got)
+        if cuda:
             items.append(_item("torch", "PyTorch with CUDA", OK,
                                f"CUDA {cuda}", needs=["venv"]))
         else:

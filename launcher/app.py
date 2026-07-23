@@ -2,6 +2,7 @@
 import pathlib
 import sys
 import threading
+import webbrowser
 
 import webview
 
@@ -14,24 +15,27 @@ from server.config import (HOST, VRAM_MODES, load_port, load_settings,
 
 VERSION = "0.1.0"
 TITLE = "SpriteForge"
-WIDTH = 520
+NARROW = 476
+# the log panel adds this to the width when it's open
+LOGW = 360
+WIDE = NARROW + LOGW
+# SetWindowPos sizes the outer window, not the client area; measured via
+# CDP, the border eats exactly this many px at any width
+CHROME_W = 16
 # ignore sub-pixel height jitter so DPI rounding never ping-pongs the window
 FIT_DEADBAND = 3
-# measured against the real page: the main screen collapsed needs exactly this
-HEIGHT_COMPACT = 380
-# a hard floor low enough that a short screen (setup) still fits snugly; the
-# content drives the real height, this only stops a degenerate tiny window
+# the page measures itself and drives the real height from here
+HEIGHT_COMPACT = 360
 MIN_HEIGHT = 240
-MIN_SIZE = (WIDTH, MIN_HEIGHT)
+MIN_SIZE = (NARROW, MIN_HEIGHT)
+SERVER_NEEDS = ("venv", "deps", "torch")
 MAX_SCREEN_FRACTION = 0.9
 POLL_SECONDS = 1.5
 OFFLINE = {"state": "offline", "progress": 0.0, "stage": None}
 NO_VENV = ("No .venv found in {root}. "
            "Build the environment the way the README describes.")
 
-# The window must never be an attribute of Api: pywebview walks the js_api
-# object to expose it, and walking a Window recurses through
-# native.AccessibilityObject until the UI thread is wedged.
+# must not be an Api attribute: pywebview walking it into js_api wedges the UI thread
 _window = None
 
 
@@ -42,12 +46,16 @@ def _screen_height(default: int = 1080) -> int:
         return default
 
 
-def ui_file() -> str:
+def _ui(name: str) -> str:
     if getattr(sys, "frozen", False):
-        base = pathlib.Path(sys._MEIPASS) / "ui" / "index.html"
+        base = pathlib.Path(sys._MEIPASS) / "ui" / name
     else:
-        base = pathlib.Path(__file__).resolve().parent / "ui" / "index.html"
+        base = pathlib.Path(__file__).resolve().parent / "ui" / name
     return str(base)
+
+
+def ui_file() -> str:
+    return _ui("index.html")
 
 
 def webview2_present() -> bool:
@@ -75,7 +83,7 @@ class Api:
         self.hint = ""
         self.hint_bad = False
         self.height = HEIGHT_COMPACT
-        self.width = WIDTH
+        self.width = NARROW
         self.paths = paths.resolve()
         self.items: list[dict] = []
         self.checking = False
@@ -109,25 +117,51 @@ class Api:
     def state(self) -> dict:
         return self._snapshot()
 
-    def fit(self, delta: int) -> None:
-        """Follow the page's own height; width is fixed, tiny jitter ignored."""
-        if not _window or abs(int(delta)) <= FIT_DEADBAND:
+    def resize(self, delta: int) -> None:
+        """Only the height follows the page; width moves via set_width."""
+        if not _window:
             return
-        cap = int(_screen_height() * MAX_SCREEN_FRACTION)
-        target = min(max(MIN_HEIGHT, self.height + int(delta)), cap)
-        if target != self.height:
-            self.height = target
-            _window.resize(WIDTH, target)
+        d = int(delta)
+        # grow instantly; shrink only past the deadband to avoid DPI jitter
+        if d > 0 or d < -FIT_DEADBAND:
+            cap = int(_screen_height() * MAX_SCREEN_FRACTION)
+            target = min(max(MIN_HEIGHT, self.height + d), cap)
+            if target != self.height:
+                self.height = target
+                _window.resize(self.width + CHROME_W, target)
+
+    def set_width(self, width: int) -> None:
+        """A one-shot width jump (log panel open/close), never continuous."""
+        if not _window:
+            return
+        w = int(width)
+        if w != self.width:
+            self.width = w
+            _window.resize(w + CHROME_W, self.height)
+
+    def open_url(self, url: str) -> None:
+        if str(url).startswith(("http://", "https://")):
+            webbrowser.open(url)
+
+    def _server_ready(self) -> bool:
+        state = {it["id"]: it["state"] for it in self.items}
+        return bool(self.items) and all(
+            state.get(k) == setup_checks.OK for k in SERVER_NEEDS)
 
     def toggle_server(self) -> dict:
         if self.proc.is_alive():
             self.stopped_by_user = True
             self.proc.stop()
+            self.proc.lines.append("-- stopped --")
             self.health = dict(OFFLINE)
             self._say("")
             return self._snapshot()
         if server_proc.venv_python(self.root) is None:
             self._say(NO_VENV.format(root=self.root), bad=True)
+            return self._snapshot()
+        if not self._server_ready():
+            self._say("Finish Setup first: install the missing pieces.",
+                      bad=True)
             return self._snapshot()
         free = server_proc.pick_port(self.port)
         if free != self.port:
@@ -234,6 +268,7 @@ class Api:
         if picked:
             save_settings({kind: str(picked[0])})
             self.paths = paths.resolve()
+            self.step_state = {}
         return self.recheck()
 
     def reset_path(self, kind: str) -> dict:
@@ -241,6 +276,7 @@ class Api:
         if kind in ("root", "python", "aseprite_dir", "models_dir"):
             save_settings({kind: None})
             self.paths = paths.resolve()
+            self.step_state = {}
         return self.recheck()
 
     def install_plugin(self) -> dict:
@@ -283,6 +319,13 @@ class Api:
             return "busy", "Starting", 0.0
         if self.proc.proc is not None and not self.stopped_by_user:
             return "error", "Server crashed", 0.0
+        if self.proc.proc is None:
+            # while the background check is still running self.items is
+            # empty, which would otherwise read as "not ready" for a split
+            # second even on a machine that's perfectly set up
+            if self.items and not self._server_ready():
+                return "", "Need to configure", 0.0
+            return "", "Not started", 0.0
         return "", "Server stopped", 0.0
 
     def _snapshot(self) -> dict:
@@ -298,7 +341,7 @@ class Api:
             "label": label,
             "progress": progress,
             "running": self.proc.is_alive(),
-            "can_start": server_proc.venv_python(self.root) is not None,
+            "can_start": self._server_ready(),
             "hint": self.hint,
             "hint_bad": self.hint_bad,
             "vram_mode": load_vram_mode(),
@@ -313,13 +356,13 @@ def main() -> None:
     global _window
     api = Api()
     window = webview.create_window(TITLE, ui_file(), js_api=api,
-                                   width=WIDTH, height=HEIGHT_COMPACT,
+                                   width=NARROW + CHROME_W, height=HEIGHT_COMPACT,
                                    min_size=MIN_SIZE, resizable=False,
                                    background_color="#14161c")
     _window = window
-    # a window the user dragged taller must not confuse the next fit
-    window.events.resized += lambda width, height: setattr(api, "height",
-                                                           height)
+
+    window.events.closing += lambda: api.proc.stop()
+
     if not webview2_present():
         window.load_html(
             "<body style='background:#14161c;color:#d3d7e0;"
@@ -327,7 +370,6 @@ def main() -> None:
             "Microsoft Edge WebView2 is required.<br><br>Get it at "
             "developer.microsoft.com/microsoft-edge/webview2, "
             "then start SpriteForge again.</body>")
-    window.events.closing += lambda: api.proc.stop()
     webview.start()
 
 

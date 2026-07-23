@@ -16,3 +16,6 @@ output/
 build/
 dist/
 SpriteForge.exe
+
+# disposable preview, regenerated from launcher/ui/index.html
+launcher/ui/preview.html
