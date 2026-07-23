@@ -7,6 +7,8 @@ thread, so swaps serialize with generation.
 """
 import gc
 import logging
+import math
+import time
 
 log = logging.getLogger("spriteloom.models")
 
@@ -24,18 +26,35 @@ def is_ready(name):
     return _resident_name == name
 
 
-_load_progress = None  # (0..1 of current stage, stage label) while loading
+_load_progress = None  # (value, stage, ceiling, reported at) while loading
+_load_floor = 0.0
+CREEP_TAU = 6.0   # seconds to cover ~63% of the gap to the ceiling
+CREEP_MAX = 0.9   # of the gap, so a step never reads as finished early
 
 
-def set_load_progress(v, stage=None):
-    """Mirror of the CURRENT console bar - no merging into one fake total.
-    v=None clears (load finished/failed)."""
-    global _load_progress
-    _load_progress = None if v is None else (v, stage)
+def set_load_progress(v, stage=None, ceiling=None):
+    """Fraction of the whole load, with the console's own stage as the label.
+    ceiling is where the step in flight ends; v=None clears (done/failed)."""
+    global _load_progress, _load_floor
+    if v is None:
+        _load_progress, _load_floor = None, 0.0
+        return
+    _load_progress = (v, stage, v if ceiling is None else ceiling,
+                      time.monotonic())
 
 
 def load_progress():
-    return _load_progress
+    """Between step boundaries the value creeps toward the step's end,
+    never reaching it, so a silent loader still moves the bar."""
+    global _load_floor
+    if _load_progress is None:
+        return None
+    v, stage, ceiling, since = _load_progress
+    if ceiling > v:
+        gap = 1.0 - math.exp(-(time.monotonic() - since) / CREEP_TAU)
+        v += (ceiling - v) * min(gap, CREEP_MAX)
+    _load_floor = max(_load_floor, v)
+    return _load_floor, stage
 
 
 def get(name, on_stage=None):
@@ -70,8 +89,8 @@ def get(name, on_stage=None):
 
 def reset():
     """Drop everything (tests and error recovery)."""
-    global _resident_name, _resident, _load_progress
+    global _resident_name, _resident
     _resident = None
     _resident_name = None
-    _load_progress = None
+    set_load_progress(None)
     _factories.clear()

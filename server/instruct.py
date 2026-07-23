@@ -7,7 +7,9 @@ the 8-bit one did.
 """
 import contextlib
 import logging
+import pathlib
 import random
+from collections.abc import ItemsView
 
 from PIL import Image
 
@@ -25,6 +27,9 @@ MAX_SIDE = 512
 # bf16 peaks ~13 GB; only 12+ GB cards get it. Below that, offload is the
 # lossless default (fp8 stays behind an explicit override until verified).
 BF16_MIN_FREE = 11 * 1024 ** 3
+
+# reading the files is the measured part of the load; the rest is the GPU copy
+READ_SPAN = 0.9
 
 log = logging.getLogger("spriteloom.instruct")
 
@@ -56,43 +61,112 @@ def t2i_size(target_size: tuple[int, int],
             max(16, round(h * scale / 16) * 16))
 
 
+def component_bytes(models_dir: str) -> dict:
+    """On-disk size of each pipeline component in the newest snapshot."""
+    root = (pathlib.Path(models_dir)
+            / ("models--" + MODEL_ID.replace("/", "--")) / "snapshots")
+    snaps = sorted((p for p in root.glob("*") if p.is_dir()),
+                   key=lambda p: p.stat().st_mtime)
+    if not snaps:
+        return {}
+    return {d.name: sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+            for d in snaps[-1].iterdir() if d.is_dir()}
+
+
+def _cum_weights(bar, weigh):
+    """Cumulative 0..1 slices of a bar by real weight, None to split evenly."""
+    total = getattr(bar, "total", None) or 0
+    items = getattr(bar, "iterable", None)
+    if not weigh or total <= 0:
+        return None
+    # re-iterable only: consuming a one-shot iterator would eat the load
+    if not isinstance(items, (ItemsView, list, tuple)):
+        return None
+    names = [i[0] if isinstance(i, tuple) else i for i in items]
+    if len(names) != total:
+        return None
+    weights = weigh(names)
+    grand = sum(weights)
+    if grand <= 0:
+        return None
+    cum, run = [0.0], 0.0
+    for w in weights:
+        run += w / grand
+        cum.append(run)
+    return cum
+
+
 @contextlib.contextmanager
-def _report_tqdm(report):
-    """Relay the CURRENT tqdm bar of from_pretrained (innermost one with a
-    total) as (fraction, description) - the panel shows the same stages the
-    console does instead of one merged made-up percentage.
-    diffusers/transformers resolve tqdm at call time, so swapping the class
-    catches their bars."""
+def _report_tqdm(report, weigh=None):
+    """Relay the nested tqdm bars of from_pretrained as one (fraction, label,
+    ceiling), each bar filling its parent's current unit, units sized by
+    weigh(names). diffusers resolves tqdm at call time, so swapping it."""
     import tqdm as tqdm_lib
     import tqdm.auto as tqdm_auto
     real = tqdm_lib.tqdm
     stack = []  # active bars, outermost first
+    floor = [None, 0.0]  # outermost bar the floor belongs to, value
 
     def current():
-        for bar in reversed(stack):
-            t = getattr(bar, "total", None) or 0
-            if t > 0:
-                label = (getattr(bar, "desc", "") or "").rstrip(": ")
-                return min(bar.n / t, 1.0), (label or None)
-        return 0.0, None
+        frac, span, label = 0.0, 1.0, None
+        for bar in stack:
+            total = getattr(bar, "total", None) or 0
+            if total <= 0:
+                continue
+            seen = getattr(bar, "_seen", None)
+            done = min(max(bar.n if seen is None else seen, 0), total)
+            cum = getattr(bar, "_cum", None)
+            if cum:
+                start = cum[done]
+                unit = cum[min(done + 1, total)] - start
+            else:
+                start = done / total
+                unit = 1.0 / total if done < total else 0.0
+            frac += span * start
+            span *= unit
+            label = (getattr(bar, "desc", "") or "").rstrip(": ") or label
+        return min(frac, 1.0), label, min(frac + span, 1.0)
+
+    def emit():
+        if not stack:
+            return
+        frac, label, ceiling = current()
+        # a fresh outermost bar is a new 0..1 run, not a step back
+        if stack[0] is not floor[0]:
+            floor[:] = [stack[0], 0.0]
+        frac = max(frac, floor[1])
+        floor[1] = frac
+        report(frac, label, max(ceiling, frac))
 
     class Mirror(real):
         def __init__(self, *a, **kw):
             super().__init__(*a, **kw)
+            self._cum = _cum_weights(self, weigh)
+            self._seen = None
             stack.append(self)
-            report(*current())
+            emit()
+
+        def __iter__(self):
+            # tqdm keeps the count local and syncs self.n only on redraw
+            self._seen = 0
+            for item in super().__iter__():
+                emit()
+                yield item
+                self._seen += 1
 
         def update(self, n=1):
             out = super().update(n)
-            report(*current())
+            emit()
             return out
 
         def close(self):
+            # tqdm closes an iterated bar itself, so fill its span here
             if self in stack:
+                if self._seen is not None:
+                    self._seen = getattr(self, "total", None) or self._seen
+                emit()
                 stack.remove(self)
             super().close()
-            if stack:
-                report(*current())
 
     tqdm_lib.tqdm = Mirror
     tqdm_auto.tqdm = Mirror
@@ -125,13 +199,26 @@ class KleinPipeline:
         models.set_load_progress(0.0, "Reading model files")
         builders = {"offload": self._build_offload, "fp8": self._build_fp8}
         build = builders.get(self._resolved, self._build_bf16)
-        with _report_tqdm(models.set_load_progress):
+        # two 7 GB components carry the wait; equal steps would misplace it
+        sizes = component_bytes(self.models_dir)
+        weigh = lambda names: [sizes.get(n, 0) for n in names]
+        def report(v, stage=None, ceiling=None):
+            models.set_load_progress(
+                v * READ_SPAN, stage,
+                ceiling=None if ceiling is None else ceiling * READ_SPAN)
+        with _report_tqdm(report, weigh=weigh):
             self._pipe = build(torch, Flux2KleinPipeline)
         models.set_load_progress(1.0, "Finishing up")
         self._pipe.vae.enable_slicing()
         gc.collect()
         torch.cuda.empty_cache()
         log.info("klein pipeline ready (%s)", self._resolved)
+
+    def _to_cuda(self, pipe):
+        from server import models
+        models.set_load_progress(READ_SPAN, "Moving model to GPU",
+                                 ceiling=0.99)
+        return pipe.to("cuda")
 
     def _build_bf16(self, torch, Pipe):
         """12+ GB resident: 8-bit text encoder + bf16 transformer."""
@@ -142,10 +229,11 @@ class KleinPipeline:
                 quant_kwargs={"load_in_8bit": True},
                 components_to_quantize=["text_encoder"],
             )
-            return Pipe.from_pretrained(
+            pipe = Pipe.from_pretrained(
                 MODEL_ID, torch_dtype=torch.bfloat16,
                 cache_dir=self.models_dir,
-                quantization_config=quant).to("cuda")
+                quantization_config=quant)
+            return self._to_cuda(pipe)
         except Exception:
             log.exception("resident load failed; falling back to CPU "
                           "offload (slower, ~16 GB of system RAM)")
@@ -166,10 +254,11 @@ class KleinPipeline:
             "transformer": TorchAoConfig(Float8WeightOnlyConfig()),
             "text_encoder": BitsAndBytesConfig(load_in_8bit=True),
         })
-        return Pipe.from_pretrained(
+        pipe = Pipe.from_pretrained(
             MODEL_ID, torch_dtype=torch.bfloat16,
             cache_dir=self.models_dir,
-            quantization_config=quant).to("cuda")
+            quantization_config=quant)
+        return self._to_cuda(pipe)
 
     def _build_offload(self, torch, Pipe):
         """8 GB lossless: bf16 weights streamed module-by-module off the GPU.
