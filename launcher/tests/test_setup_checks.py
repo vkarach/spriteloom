@@ -58,7 +58,7 @@ def test_deps_missing_when_import_fails(tmp_path):
 
 def test_torch_missing_without_cuda(tmp_path):
     def run(cmd):
-        return "None False" if "torch" in cmd[-1] else "ok"
+        return "2.8.0+cpu" if "torch" in cmd[-1] else "ok"
     items = by_id(setup_checks.check_all(make_paths(tmp_path, venv=True),
                                          run=run))
     assert items["torch"]["state"] == setup_checks.MISSING
@@ -66,7 +66,7 @@ def test_torch_missing_without_cuda(tmp_path):
 
 def test_torch_ok_with_cuda(tmp_path):
     def run(cmd):
-        return "12.8 True" if "torch" in cmd[-1] else "ok"
+        return "2.8.0+cu128" if "torch" in cmd[-1] else "ok"
     items = by_id(setup_checks.check_all(make_paths(tmp_path, venv=True),
                                          run=run))
     assert items["torch"]["state"] == setup_checks.OK
