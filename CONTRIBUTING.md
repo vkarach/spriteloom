@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for taking a look. SpriteForge is a Python WebSocket server plus an
+Thanks for taking a look. Spriteloom is a Python WebSocket server plus an
 Aseprite Lua extension.
 
 ## Setup

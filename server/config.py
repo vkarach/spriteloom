@@ -17,7 +17,7 @@ DEFAULT_MODELS_DIR = "models"
 def config_path() -> pathlib.Path:
     base = os.environ.get("APPDATA")
     root = pathlib.Path(base) if base else pathlib.Path.home()
-    return root / "SpriteForge" / "config.json"
+    return root / "Spriteloom" / "config.json"
 
 
 def load_port(path: pathlib.Path | None = None) -> int:

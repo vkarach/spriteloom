@@ -14,7 +14,7 @@ from server.config import (HOST, VRAM_MODES, load_port, load_settings,
                            save_vram_mode)
 
 VERSION = "0.1.0"
-TITLE = "SpriteForge"
+TITLE = "Spriteloom"
 NARROW = 476
 # the log panel adds this to the width when it's open
 LOGW = 360
@@ -369,7 +369,7 @@ def main() -> None:
             "font:13px monospace;padding:24px;line-height:1.5'>"
             "Microsoft Edge WebView2 is required.<br><br>Get it at "
             "developer.microsoft.com/microsoft-edge/webview2, "
-            "then start SpriteForge again.</body>")
+            "then start Spriteloom again.</body>")
     webview.start()
 
 

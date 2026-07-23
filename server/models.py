@@ -8,7 +8,7 @@ thread, so swaps serialize with generation.
 import gc
 import logging
 
-log = logging.getLogger("spriteforge.models")
+log = logging.getLogger("spriteloom.models")
 
 _factories = {}
 _resident_name = None

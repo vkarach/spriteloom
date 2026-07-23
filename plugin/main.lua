@@ -7,8 +7,8 @@ function init(plugin)
   local dialogs = chunk(pluginDir)
 
   plugin:newCommand{
-    id = "SpriteForgeOpen",
-    title = "SpriteForge...",
+    id = "SpriteloomOpen",
+    title = "Spriteloom...",
     group = "sprite_properties",
     onclick = function() dialogs.open() end,
   }

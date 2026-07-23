@@ -5,7 +5,7 @@ import pathlib
 import shutil
 import sys
 
-FOLDER = "spriteforge"
+FOLDER = "spriteloom"
 PORT_FILE = "server.json"
 
 

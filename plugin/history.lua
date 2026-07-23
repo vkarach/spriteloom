@@ -29,8 +29,8 @@ local function showRun(client, offset)
       imgs[n] = sprite.imageFromPayload(s, "h" .. n)
     end
     results.showGrid{
-      title = "SpriteForge - Run (click a variant to insert)",
-      imgs = imgs, seeds = run.seeds, prefix = "SpriteForge H",
+      title = "Spriteloom - Run (click a variant to insert)",
+      imgs = imgs, seeds = run.seeds, prefix = "Spriteloom H",
       headers = {
         { text = run.mode .. "   " .. ui.runWhen(run.name) },
         { text = run.prompt, dim = true },
@@ -58,7 +58,7 @@ showHistory = function(client)
   local PAGE = 21
   local nextOffset, fetching, allLoaded = 0, false, false
 
-  local dlg = Dialog("SpriteForge - History (scroll, click a run)")
+  local dlg = Dialog("Spriteloom - History (scroll, click a run)")
 
   local function maxScroll()
     if histMode == "grid" then

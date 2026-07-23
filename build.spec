@@ -12,8 +12,8 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas,
-    name="SpriteForge",
+    name="Spriteloom",
     console=False,
-    icon="assets/spriteforge.ico",
+    icon="assets/spriteloom.ico",
     upx=False,
 )

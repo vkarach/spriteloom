@@ -1,4 +1,4 @@
--- WebSocket client for the SpriteForge server. One request at a time.
+-- WebSocket client for the Spriteloom server. One request at a time.
 local pluginDir = ...
 
 -- the launcher writes server.json here; without it the built in default holds
@@ -16,7 +16,7 @@ end
 
 local M = { URL = "http://127.0.0.1:" .. readPort() }
 
-local OFFLINE = "Server offline. Open the SpriteForge app and press Start."
+local OFFLINE = "Server offline. Open the Spriteloom app and press Start."
 
 -- a socket whose peer is gone throws from sendText and close, and an
 -- uncaught throw here opens the Aseprite Console on top of the panel

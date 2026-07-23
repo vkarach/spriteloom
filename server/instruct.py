@@ -26,7 +26,7 @@ MAX_SIDE = 512
 # lossless default (fp8 stays behind an explicit override until verified).
 BF16_MIN_FREE = 11 * 1024 ** 3
 
-log = logging.getLogger("spriteforge.instruct")
+log = logging.getLogger("spriteloom.instruct")
 
 
 def resolve_mode(mode: str, free_bytes: int) -> str:

@@ -1,4 +1,4 @@
--- SpriteForge control panel; see ui.lua for the Aseprite dialog rules.
+-- Spriteloom control panel; see ui.lua for the Aseprite dialog rules.
 local pluginDir = ...
 local function moduleFrom(name)
   return assert(loadfile(app.fs.joinPath(pluginDir, name)))(pluginDir)
@@ -29,7 +29,7 @@ local PAL_FILETYPES = { "gpl", "pal", "png", "aseprite", "ase", "act",
 -- Advanced params live in their own modal window so toggling them never
 -- resizes the main panel (Aseprite auto-sizes dialogs to their content).
 local function showAdvanced()
-  local a = Dialog{ title = "SpriteForge - Advanced", resizeable = false }
+  local a = Dialog{ title = "Spriteloom - Advanced", resizeable = false }
   a:combobox{ id = "background", label = "Background:",
              option = last.background, options = { "Auto", "Remove", "Keep" } }
   a:combobox{ id = "palette", label = "Palette:", option = last.palette,
@@ -453,7 +453,7 @@ function D.open()
     elseif serverStatus == "checking" then
       line = "Connecting to server..."
     elseif serverStatus == "offline" then
-      line = "Server offline. Open the SpriteForge app"
+      line = "Server offline. Open the Spriteloom app"
     elseif serverStatus == "warming" and state ~= "error" then
       line = "Loading Klein model"
     end
@@ -511,7 +511,7 @@ function D.open()
   end
 
   dlg = Dialog{
-    title = "SpriteForge",
+    title = "Spriteloom",
     resizeable = false,
     onclose = function()
       D._isOpen = false

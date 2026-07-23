@@ -1,11 +1,11 @@
 {
-  "name": "spriteforge",
-  "displayName": "SpriteForge",
+  "name": "spriteloom",
+  "displayName": "Spriteloom",
   "description": "Local AI pixel-art assistant (generate / edit / inpaint)",
   "version": "0.1.0",
   "author": { "name": "Valentyn Karachevtsev" },
   "contributes": {
     "scripts": [{ "path": "./main.lua" }],
-    "keys": [{ "id": "spriteforge-keys", "path": "./spriteforge.aseprite-keys" }]
+    "keys": [{ "id": "spriteloom-keys", "path": "./spriteloom.aseprite-keys" }]
   }
 }

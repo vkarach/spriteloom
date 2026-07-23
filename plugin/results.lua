@@ -68,8 +68,8 @@ end
 
 function R.showResults(imgs, seeds, onInserted)
   R.showGrid{
-    title = "SpriteForge - Results (click a variant to insert)",
-    imgs = imgs, seeds = seeds, prefix = "SpriteForge ",
+    title = "Spriteloom - Results (click a variant to insert)",
+    imgs = imgs, seeds = seeds, prefix = "Spriteloom ",
     onInserted = onInserted,
   }
 end

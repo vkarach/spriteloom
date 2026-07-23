@@ -123,7 +123,7 @@ end
 
 -- Tiny modal note (empty runs, load errors).
 function U.message(text)
-  local d = Dialog("SpriteForge")
+  local d = Dialog("Spriteloom")
   d:label{ text = text }
   d:button{ text = "OK", focus = true, onclick = function() d:close() end }
   d:show{ wait = true }
@@ -175,7 +175,7 @@ function U.showPromptPreview(text)
   end
   if line ~= "" then lines[#lines + 1] = line end
   local H = 12 + #lines * 14
-  local dlg = Dialog("SpriteForge - Full prompt")
+  local dlg = Dialog("Spriteloom - Full prompt")
   dlg:canvas{
     width = 440, height = H,
     onpaint = function(ev)

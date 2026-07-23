@@ -15,7 +15,7 @@ output/
 # PyInstaller
 build/
 dist/
-SpriteForge.exe
+Spriteloom.exe
 
 # disposable preview, regenerated from launcher/ui/index.html
 launcher/ui/preview.html

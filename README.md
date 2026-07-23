@@ -1,14 +1,14 @@
-# SpriteForge
+# Spriteloom
 
 **Local AI pixel-art assistant for [Aseprite](https://www.aseprite.org/).**
 Generate sprites from a text prompt, edit existing sprites with an
 instruction, or redraw a selected region — all running on your own GPU.
 No cloud, no subscription, your pixels never leave your machine.
 
-**[Sample output and how it works → vkarach.github.io/sprite-forge](https://vkarach.github.io/sprite-forge/)**
+**[Sample output and how it works → vkarach.github.io/spriteloom](https://vkarach.github.io/spriteloom/)**
 
 <!-- Add the screencast GIF here once recorded; see assets/demo.gif -->
-<!-- ![SpriteForge in action](assets/demo.gif) -->
+<!-- ![Spriteloom in action](assets/demo.gif) -->
 
 <p align="center">
   <img src="assets/gallery/chest.png" width="110" alt="treasure chest">
@@ -56,16 +56,17 @@ a lightweight tool:
 | Aseprite | 1.3+ |
 | Disk | ~15 GB for the model (downloaded on first use) |
 
-No NVIDIA GPU with enough VRAM, no SpriteForge. There is no CPU fallback
+No NVIDIA GPU with enough VRAM, no Spriteloom. There is no CPU fallback
 and no cloud option by design — the whole point is that it runs locally.
 
 ## Install
 
-1. Download this repository. Put `SpriteForge.exe` in the project root and run
-   it. The exe is not shipped in git: build it once with the command near the
-   end of this section, or copy a prebuilt one next to the repo files.
-2. Press **Setup**. It shows what is missing: the environment, the
-   dependencies, PyTorch, the plugin, the model.
+1. Download the latest release zip from the
+   [Releases page](https://github.com/vkarach/spriteloom/releases) and
+   unzip it anywhere. It has `Spriteloom.exe`, `server/`, and `plugin/`
+   together; nothing else to fetch first.
+2. Run `Spriteloom.exe`, then press **Setup**. It shows what is missing:
+   the environment, the dependencies, PyTorch, the plugin, the model.
 3. Tick what you want and press **Install selected**. It builds the `.venv`,
    installs the packages and the plugin, and prints a live log. Restart
    Aseprite once the plugin is in.
@@ -80,18 +81,19 @@ If you would rather do it by hand:
 3. `.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu128`
 4. `install-plugin.bat`, then restart Aseprite.
 
-To build the exe yourself: `.venv\Scripts\python -m pip install -r
-launcher\requirements.txt`, then `.venv\Scripts\python -m PyInstaller
-build.spec`, and copy `dist\SpriteForge.exe` next to `.venv`. It is a
-launcher only, about 15 MB: the model and PyTorch stay outside it.
+To build the exe yourself from a full clone of this repository:
+`.venv\Scripts\python -m pip install -r launcher\requirements.txt`, then
+`.venv\Scripts\python -m PyInstaller build.spec --distpath .` -- it builds
+straight into the project root as `Spriteloom.exe`, about 15 MB: the model
+and PyTorch stay outside it.
 
 ## Use
 
-1. Run `SpriteForge.exe`, press **START** and leave the window open. The dot
+1. Run `Spriteloom.exe`, press **START** and leave the window open. The dot
    turns green once the model is resident, about 25 seconds after a warm
    start. Closing the window stops the server. (`start-server.bat` still
    works if you prefer a console.)
-2. In Aseprite: **Sprite → SpriteForge...** (or press **F1**). Pick a task,
+2. In Aseprite: **Sprite → Spriteloom...** (or press **F1**). Pick a task,
    fill the fields, press **Run**. Results open in a separate window; click
    a variant to insert it as a new layer.
 3. **Generate** understands full sentences: pick a **View** preset, name the
@@ -193,7 +195,7 @@ Layout and ghosting still need a real Aseprite.
 | `launcher/setup_steps.py` | running the install steps in order |
 | `server/config.py` | the settings, shared by the launcher and the server |
 
-The launcher owns the settings file `%APPDATA%\SpriteForge\config.json`: the
+The launcher owns the settings file `%APPDATA%\Spriteloom\config.json`: the
 port, the VRAM mode, and the setup paths all live there, and every write
 merges so one key never erases another. The port defaults to 8765, and
 **Install** stamps it into `server.json` next to the plugin, so both ends

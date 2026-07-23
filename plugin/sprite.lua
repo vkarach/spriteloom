@@ -6,7 +6,7 @@ local b64 = dofile(app.fs.joinPath(pluginDir, "base64.lua"))
 local S = {}
 
 local function tempPath(name)
-  return app.fs.joinPath(app.fs.tempPath, "spriteforge_" .. name)
+  return app.fs.joinPath(app.fs.tempPath, "spriteloom_" .. name)
 end
 
 local function readFile(path)
@@ -123,7 +123,7 @@ function S.insertAsLayer(img, name)
     return { sprite = spr, layer = layer, created = true }
   end
   local layer
-  app.transaction("SpriteForge: insert variant", function()
+  app.transaction("Spriteloom: insert variant", function()
     layer = spr:newLayer()
     layer.name = name
     spr:newCel(layer, app.frame, img, Point(0, 0))
@@ -137,7 +137,7 @@ function S.removeInserted(entry)
     if entry.created then
       entry.sprite:close()  -- closes the untitled sprite without prompting
     else
-      app.transaction("SpriteForge: remove variant", function()
+      app.transaction("Spriteloom: remove variant", function()
         entry.sprite:deleteLayer(entry.layer)
       end)
     end

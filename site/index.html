@@ -1,5 +1,5 @@
-<title>SpriteForge, local AI pixel art assistant for Aseprite</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='2' y='5' width='8' height='8' fill='%23e8705a'/><rect x='5' y='2' width='8' height='8' fill='%23f2b23c'/><rect x='2' y='2' width='8' height='8' fill='%23f2b23c'/></svg>">
+<title>Spriteloom, local AI pixel art assistant for Aseprite</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' width='4' height='16' fill='%23f2b23c'/><rect x='9' width='4' height='16' fill='%23f2b23c'/><rect y='3' width='16' height='4' fill='%23e8705a'/><rect y='9' width='16' height='4' fill='%23e8705a'/><rect x='3' y='3' width='4' height='4' fill='%23f2b23c'/><rect x='9' y='9' width='4' height='4' fill='%23f2b23c'/></svg>">
 <style>
   :root {
     --bg: #14161c;
@@ -81,7 +81,7 @@
   }
   .bar .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
   .brand { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-weight: 700; letter-spacing: 0.02em; }
-  .brand .dot { width: 12px; height: 12px; background: var(--gold); box-shadow: 4px 0 0 var(--gold), 0 4px 0 var(--danger); }
+  .brand .dot { width: 16px; height: 16px; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' width='4' height='16' fill='%23f2b23c'/><rect x='9' width='4' height='16' fill='%23f2b23c'/><rect y='3' width='16' height='4' fill='%23e8705a'/><rect y='9' width='16' height='4' fill='%23e8705a'/><rect x='3' y='3' width='4' height='4' fill='%23f2b23c'/><rect x='9' y='9' width='4' height='4' fill='%23f2b23c'/></svg>") center/contain no-repeat; }
   .bar nav { display: flex; gap: 22px; font-size: 14px; }
   .bar nav a { color: var(--ink-dim); }
   .bar nav a:hover { color: var(--ink); text-decoration: none; }
@@ -249,12 +249,12 @@
 
 <header class="bar">
   <div class="wrap">
-    <div class="brand"><span class="dot"></span> SpriteForge</div>
+    <div class="brand"><span class="dot"></span> Spriteloom</div>
     <nav>
       <a class="navlink" href="#tasks">What it does</a>
       <a class="navlink" href="#how">How it works</a>
       <a class="navlink" href="#req">Requirements</a>
-      <a class="ghbtn" href="https://github.com/vkarach/sprite-forge">GitHub ↗</a>
+      <a class="ghbtn" href="https://github.com/vkarach/spriteloom">GitHub ↗</a>
     </nav>
   </div>
 </header>
@@ -265,13 +265,13 @@
       <div class="eyebrow">Local · GPU only · No subscription</div>
       <h1>Pixel art sprites, generated <span class="fg">inside Aseprite.</span></h1>
       <p class="lede">
-        SpriteForge runs a diffusion model on your own GPU and wires it straight
+        Spriteloom runs a diffusion model on your own GPU and wires it straight
         into Aseprite. Type a prompt, get a sprite; describe an edit, get a
         variant dropped in as a new layer. Nothing leaves your machine, and
         your existing pixels are never touched.
       </p>
       <div class="cta">
-        <a class="btn primary" href="https://github.com/vkarach/sprite-forge">Get it on GitHub</a>
+        <a class="btn primary" href="https://github.com/vkarach/spriteloom">Get it on GitHub</a>
         <a class="btn secondary" href="#how">See how it works</a>
       </div>
       <div class="badges">
@@ -427,7 +427,7 @@
       <div class="eyebrow">Before you download</div>
       <h2 class="section-title">This runs a real model on your hardware</h2>
       <p class="section-sub">
-        SpriteForge is deliberately local: no cloud, no CPU fallback. That
+        Spriteloom is deliberately local: no cloud, no CPU fallback. That
         buys you privacy and zero subscription, at the cost of needing a
         capable GPU. Check the spec before you install.
       </p>
@@ -439,7 +439,7 @@
         <div class="row"><div class="k">Disk</div><div class="v">~15 GB for the model, downloaded on first run</div></div>
       </div>
       <div class="warn">
-        No NVIDIA GPU with enough VRAM, no SpriteForge. There is no cloud
+        No NVIDIA GPU with enough VRAM, no Spriteloom. There is no cloud
         option by design. If that's a dealbreaker, this tool isn't for you,
         and that's fine.
       </div>
@@ -454,7 +454,7 @@
         <div class="step"><div class="n"></div><div class="body"><p>Create a virtual environment: <code>py -3 -m venv .venv</code></p></div></div>
         <div class="step"><div class="n"></div><div class="body"><p>Install server deps: <code>.venv\Scripts\python -m pip install -r server\requirements.txt</code></p></div></div>
         <div class="step"><div class="n"></div><div class="body"><p>Install CUDA Torch: <code>pip install torch --index-url https://download.pytorch.org/whl/cu128</code></p></div></div>
-        <div class="step"><div class="n"></div><div class="body"><p>Run <code class="inline">install-plugin.bat</code>, restart Aseprite, then start the server and open <strong>Sprite → SpriteForge</strong>.</p></div></div>
+        <div class="step"><div class="n"></div><div class="body"><p>Run <code class="inline">install-plugin.bat</code>, restart Aseprite, then start the server and open <strong>Sprite → Spriteloom</strong>.</p></div></div>
       </div>
     </div>
   </section>
@@ -464,7 +464,7 @@
       <h2>Forge your first sprite.</h2>
       <p>Free, open source, and entirely yours to run. Full setup and docs live on GitHub.</p>
       <div class="cta">
-        <a class="btn primary" href="https://github.com/vkarach/sprite-forge">Open the repository ↗</a>
+        <a class="btn primary" href="https://github.com/vkarach/spriteloom">Open the repository ↗</a>
       </div>
     </div>
   </section>
@@ -472,7 +472,7 @@
 
 <footer>
   <div class="wrap">
-    <span class="mono">SpriteForge · local AI pixel art assistant for Aseprite</span>
+    <span class="mono">Spriteloom · local AI pixel art assistant for Aseprite</span>
     <span class="mono">Apache 2.0 · built on FLUX.2 Klein</span>
   </div>
 </footer>

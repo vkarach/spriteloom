@@ -31,13 +31,13 @@ end
 local tmp = os.getenv("TEMP") or "/tmp"
 
 -- no folder at all: the built in default holds
-eq(loadClient(tmp .. "/spriteforge_no_such_dir").URL,
+eq(loadClient(tmp .. "/spriteloom_no_such_dir").URL,
    "http://127.0.0.1:8765", "missing server.json")
 
 -- nil pluginDir (loaded with dofile by an older caller): still the default
 eq(loadClient(nil).URL, "http://127.0.0.1:8765", "no plugin dir")
 
-local dir = tmp .. "/spriteforge_port_test"
+local dir = tmp .. "/spriteloom_port_test"
 os.execute('mkdir "' .. dir:gsub("/", "\\") .. '" 2>nul')
 
 -- a real port in the file wins

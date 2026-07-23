@@ -1,4 +1,4 @@
-"""SpriteForge server: WebSocket endpoint on localhost."""
+"""Spriteloom server: WebSocket endpoint on localhost."""
 import asyncio
 import functools
 import json
@@ -17,7 +17,7 @@ from server.postprocess import (crop_to_subject, fit_into, mirror_symmetry,
 from server.protocol import ProtocolError, parse_request, error_msg, \
     progress_msg, result_msg
 
-log = logging.getLogger("spriteforge")
+log = logging.getLogger("spriteloom")
 
 _gpu_executor = ThreadPoolExecutor(max_workers=1)
 DEBUG_DIR = pathlib.Path("output")
@@ -269,7 +269,7 @@ async def serve(host="127.0.0.1", port=8765, stop=None, on_ready=None,
     # no keepalive: the 20s ping timeout killed sockets mid-job
     async with websockets.serve(_handler, host, port, max_size=64 * 2**20,
                                 ping_interval=None):
-        log.info("SpriteForge server on ws://%s:%s", host, port)
+        log.info("Spriteloom server on ws://%s:%s", host, port)
         if on_ready:
             on_ready()
         await (stop if stop is not None else asyncio.Future())
@@ -289,4 +289,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(serve(host=HOST, port=load_port(), preload=True))
     except KeyboardInterrupt:
-        log.info("SpriteForge server stopped. Bye.")
+        log.info("Spriteloom server stopped. Bye.")
