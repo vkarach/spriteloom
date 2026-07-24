@@ -80,13 +80,8 @@ body {
 }
 #pathstoggle.open { margin-bottom: 4px; }
 #pathstoggle.open::before { transform: rotate(90deg); }
-/* height is animated from JS so the window can grow with it in step */
-.collapser { overflow: hidden; height: 0; transition: height 240ms ease; }
-/* unused fallback: decorative stand-in for the real collapse */
-.paths-ghost {
-  position: fixed; overflow: hidden; pointer-events: none; z-index: 5;
-  background: var(--bg); transition: height 240ms ease, opacity 240ms ease;
-}
+/* height is stepped from JS in lockstep with the window, no CSS transition */
+.collapser { overflow: hidden; height: 0; }
 /* compact: one row, label beside the select, not a tall block for a dropdown */
 #vramcard { padding: 12px 16px; }
 #vramcard .opt { display: flex; align-items: center; gap: 12px; }
@@ -102,16 +97,36 @@ body {
 .srow:last-child { border-bottom: 0; }
 .srow .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .srow .detail { color: var(--ink-faint); flex: none; font-size: 12px; }
-.srow.ok .mark { color: var(--ok); }
+.srow.ok .mark, .srow.done .mark { color: var(--ok); }
 .srow.blocked { opacity: 0.5; }
 .srow.failed .detail { color: var(--danger); }
 .srow.running .detail, .srow.cancelled .detail { color: var(--gold); }
-.srow .mark { width: 15px; flex: none; text-align: center; color: var(--ink-faint); }
-.srow input { flex: none; width: 15px; height: 15px; accent-color: var(--gold); }
+.srow .mark {
+  display: inline-block; width: 15px; height: 15px; line-height: 15px;
+  flex: none; margin: 0; text-align: center; color: var(--ink-faint);
+}
+.srow .mark.linked { color: var(--gold); cursor: help; }
+.srow .mark.spin {
+  display: inline-block; width: 11px; height: 11px; margin: 0 2px;
+  border: 2px solid var(--line); border-top-color: var(--gold);
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.srow input {
+  flex: none; width: 15px; height: 15px; margin: 0; accent-color: var(--gold);
+}
 #installbtn { margin-top: 14px; }
-.prow { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+.prow {
+  display: flex; align-items: center; gap: 6px; padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.prow:last-child { border-bottom: 0; }
 .prow .pname { color: var(--ink-dim); flex: none; width: 68px; font-size: 12px; }
-.prow .pval { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--ink-faint); font-size: 12px; }
+.prow .pval {
+  flex: 1; min-width: 0; overflow-wrap: break-word; color: var(--ink-faint);
+  font-size: 12px; margin-right: 4px; cursor: pointer;
+}
+.prow .pval:hover { color: var(--ink); text-decoration: underline; }
 .prow.warn .pval { color: var(--gold); }
 .prow button { padding: 4px 10px; font-size: 11.5px; flex: none; }
 .hint { overflow-wrap: anywhere; }
@@ -208,7 +223,7 @@ details[open] summary::before { content: "\25BE"; }
 #rail.open .chev { transform: rotate(135deg); }
 /* left:var(--seam), not right:0 -- right:0 would drag it with a narrowing window */
 #logpanel {
-  position: fixed; top: 0; bottom: 0; left: var(--seam); width: 360px; z-index: 2;
+  position: fixed; top: 0; bottom: 0; left: var(--seam); width: 460px; z-index: 2;
   display: flex; flex-direction: column;
   background: #0f1116; border-left: 1px solid var(--line);
   opacity: 0;
@@ -218,11 +233,15 @@ details[open] summary::before { content: "\25BE"; }
 .loghead {
   padding: 22px 16px 10px 22px; color: var(--ink-dim);
   letter-spacing: 0.08em; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: space-between;
 }
+.loghead button { padding: 3px 8px; font-size: 12px; }
+#logstatus { color: var(--ink-faint); font-weight: 400; letter-spacing: 0; }
+#logstatus:not(:empty)::before { content: "\00B7"; margin: 0 6px; opacity: 0.8; }
 #logbox {
   flex: 1; min-height: 0; margin: 0; padding: 0 16px 16px 22px; overflow: auto;
   background: transparent; border: 0; font-size: 11.5px; color: var(--ink-dim);
-  white-space: pre-wrap; word-break: break-word;
+  white-space: pre-wrap;
   user-select: text; -webkit-user-select: text;
 }
 #logbox.empty { color: var(--ink-faint); font-style: italic; user-select: none; }

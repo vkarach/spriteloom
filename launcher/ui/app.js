@@ -1,7 +1,15 @@
 const $ = (id) => document.getElementById(id);
 let busy = false;
+
+// serializes round-trip api calls; resize/set_width stay direct (no reply to race)
+let apiChain = Promise.resolve();
+function apiCall(fn) {
+  const result = apiChain.then(fn, fn);
+  apiChain = result.catch(() => {});
+  return result;
+}
 // must match --seam in style.css and NARROW in app.py
-const NARROW = 476, LOGW = 360, WIDE = NARROW + LOGW;
+const NARROW = 476, LOGW = 460, WIDE = NARROW + LOGW;
 
 let lastLog = "";
 let logHad = false;
@@ -70,6 +78,7 @@ function toggleLog() {
 
 function paint(s) {
   lastRunning = s.running;
+  $("logstatus").textContent = "";
   $("ver").textContent = s.version;
   $("addr").textContent = s.url;
   $("dot").className = "dot " + s.tone;
@@ -96,18 +105,41 @@ async function call(action) {
   busy = true;
   $("toggle").disabled = true;
   $("install").disabled = true;
-  try { paint(await action()); } finally { busy = false; }
+  try { paint(await apiCall(() => action())); } finally { busy = false; }
+}
+
+async function copyText(text) {
+  if (await apiCall(() => window.pywebview.api.copy_to_clipboard(text))) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch (e) { /* fall through to execCommand */ }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand("copy");
+  area.remove();
 }
 
 $("rail").onclick = toggleLog;
+$("logcopy").onclick = async (e) => {
+  e.stopPropagation();
+  await copyText(lastLog || "");
+  const btn = $("logcopy");
+  btn.textContent = "✓";
+  setTimeout(() => { btn.textContent = "⧉"; }, 1200);
+};
 $("author").onclick = (e) => {
   e.preventDefault();
-  window.pywebview.api.open_url($("author").href);
+  apiCall(() => window.pywebview.api.open_url($("author").href));
 };
 $("toggle").onclick = () => call(window.pywebview.api.toggle_server);
 $("install").onclick = () => call(window.pywebview.api.install_plugin);
 $("vram").onchange = async () => {
-  await window.pywebview.api.set_vram_mode($("vram").value);
+  await apiCall(() => window.pywebview.api.set_vram_mode($("vram").value));
   setupTick();
 };
 
@@ -115,7 +147,20 @@ $("vram").onchange = async () => {
 
 const PATH_LABELS = {root: "Project", python: "Python",
                      aseprite_dir: "Aseprite", models_dir: "Model"};
+
+// break only after each backslash, never mid-word ("python.\nexe")
+function setPathText(el, text) {
+  el.textContent = "";
+  const parts = text.split("\\");
+  parts.forEach((part, i) => {
+    const last = i === parts.length - 1;
+    el.appendChild(document.createTextNode(part + (last ? "" : "\\")));
+    if (!last) el.appendChild(document.createElement("wbr"));
+  });
+}
+
 const chosen = new Set();
+let effective = new Set();
 let onSetup = false;
 let installing = false;
 let lastRunning = false;
@@ -131,27 +176,68 @@ function showNote(msg) {
 }
 
 function mark(item) {
-  if (item.step_state === "running") return "…";
   if (item.step_state === "done" || item.state === "ok") return "✓";
   if (item.step_state === "failed") return "✕";
-  if (item.state === "blocked") return "·";
+  if (item.state === "blocked" || item.step_state === "skipped" ||
+      item.step_state === "cancelled") return "·";
   return "";
+}
+
+// chosen holds only explicit picks; needs are closed over fresh each render
+function closeOverNeeds(items, base) {
+  const byId = Object.fromEntries(items.map((it) => [it.id, it]));
+  const result = new Set(base);
+  const stack = [...base];
+  while (stack.length) {
+    const cur = stack.pop();
+    for (const need of byId[cur]?.needs || []) {
+      if (byId[need] && byId[need].state !== "ok" && !result.has(need)) {
+        result.add(need);
+        stack.push(need);
+      }
+    }
+  }
+  return result;
 }
 
 function setupPaint(s) {
   if (document.activeElement !== $("vram")) $("vram").value = s.vram_mode;
   installing = s.running;
 
+  const current = s.items.find((it) => it.step_state === "running");
+  $("logstatus").textContent = current ? current.label : "";
+
+  const actionableIds = new Set(s.items
+    .filter((item) => item.state !== "ok" && item.state !== "blocked")
+    .map((item) => item.id));
+  for (const id of [...chosen]) if (!actionableIds.has(id)) chosen.delete(id);
+  effective = closeOverNeeds(s.items, chosen);
+
   const rows = $("setuprows");
   rows.innerHTML = "";
-  for (const item of s.items) {
+  s.items.forEach((item, i) => {
     const row = document.createElement("div");
     row.className = "srow " + (item.step_state || item.state);
     const actionable = item.state !== "ok" && item.state !== "blocked";
-    if (actionable && !s.running) {
+    const explicit = chosen.has(item.id);
+    const isEffective = effective.has(item.id);
+    if (actionable && !item.step_state && s.running) {
+      // queued for this run, waiting its turn
+      const m = document.createElement("span");
+      m.className = "mark";
+      m.textContent = isEffective ? "•" : "";
+      row.appendChild(m);
+    } else if (actionable && !item.step_state && isEffective && !explicit) {
+      // pulled in only because another pick needs it, not a toggle of its own
+      const m = document.createElement("span");
+      m.className = "mark linked";
+      m.textContent = "•";
+      m.title = "Needed by another selected step";
+      row.appendChild(m);
+    } else if (actionable && !item.step_state) {
       const box = document.createElement("input");
       box.type = "checkbox";
-      box.checked = chosen.has(item.id);
+      box.checked = explicit;
       box.onchange = () => {
         box.checked ? chosen.add(item.id) : chosen.delete(item.id);
         setupPaint(s);
@@ -159,8 +245,13 @@ function setupPaint(s) {
       row.appendChild(box);
     } else {
       const m = document.createElement("span");
-      m.className = "mark";
-      m.textContent = mark(item);
+      m.className = "mark" + (item.step_state === "running" ? " spin" : "");
+      if (item.step_state === "running") {
+        // a fresh element every poll must resume mid-spin, not snap to 0deg
+        m.style.animationDelay = `-${performance.now() % 700}ms`;
+      } else {
+        m.textContent = mark(item);
+      }
       row.appendChild(m);
     }
     const name = document.createElement("span");
@@ -168,10 +259,10 @@ function setupPaint(s) {
     name.textContent = item.label;
     const detail = document.createElement("span");
     detail.className = "detail";
-    detail.textContent = item.step_detail || item.detail;
+    detail.textContent = item.step_state ? item.step_detail : item.detail;
     row.append(name, detail);
     rows.appendChild(row);
-  }
+  });
 
   const paths = $("setuppaths");
   paths.innerHTML = "";
@@ -183,7 +274,11 @@ function setupPaint(s) {
     name.textContent = label;
     const val = document.createElement("span");
     val.className = "pval";
-    val.textContent = s.paths[kind] || "not found";
+    setPathText(val, s.paths[kind] || "not found");
+    if (s.paths[kind]) {
+      val.title = "Open in Explorer";
+      val.onclick = () => apiCall(() => window.pywebview.api.open_path(s.paths[kind]));
+    }
     row.append(name, val);
     if ((s.overrides || []).includes(kind)) {
       const undo = document.createElement("button");
@@ -191,23 +286,23 @@ function setupPaint(s) {
       undo.textContent = "↺";
       undo.title = "Reset to auto-detect";
       undo.disabled = s.running;
-      undo.onclick = async () => setupPaint(await window.pywebview.api
-                                              .reset_path(kind));
+      undo.onclick = async () => setupPaint(await apiCall(() =>
+        window.pywebview.api.reset_path(kind)));
       row.append(undo);
     }
     const pick = document.createElement("button");
     pick.className = "ghost";
     pick.textContent = "Choose";
     pick.disabled = s.running;
-    pick.onclick = async () => setupPaint(await window.pywebview.api
-                                            .choose_path(kind));
+    pick.onclick = async () => setupPaint(await apiCall(() =>
+      window.pywebview.api.choose_path(kind)));
     row.append(pick);
     paths.appendChild(row);
   }
 
   const btn = $("installbtn");
   btn.textContent = s.running ? "CANCEL"
-    : (s.checking ? "CHECKING…" : "INSTALL SELECTED (" + chosen.size + ")");
+    : (s.checking ? "CHECKING…" : "INSTALL SELECTED (" + effective.size + ")");
   btn.disabled = !s.running && (s.checking || chosen.size === 0);
 
   renderLog(s.log.replace(/\\\\/g, "\\"));
@@ -216,8 +311,8 @@ function setupPaint(s) {
 
 $("installbtn").onclick = async () => {
   const api = window.pywebview.api;
-  setupPaint(await (installing ? api.cancel_install()
-                               : api.install([...chosen])));
+  setupPaint(await apiCall(() => installing ? api.cancel_install()
+                                             : api.install([...effective])));
 };
 
 function showScreen(setup) {
@@ -247,12 +342,12 @@ $("setupbtn").onclick = () => {
 
 async function setupTick() {
   if (!onSetup) return;
-  setupPaint(await window.pywebview.api.setup_state());
+  setupPaint(await apiCall(() => window.pywebview.api.setup_state()));
 }
 
 async function tick() {
   if (busy || onSetup) return;
-  paint(await window.pywebview.api.state());
+  paint(await apiCall(() => window.pywebview.api.state()));
 }
 
 let pathsBusy = false;
@@ -265,66 +360,27 @@ function push() {
 
 function fit() { push(); }
 
-const PATHS_MS = 250;
-const PATHS_STEPS = 20;
-const PATHS_CLOSE_ANIMATE = false;
+const PATHS_MS = 140, PATHS_STEPS = 14;
 let pathsOpen = false;
 
-// unused fallback, kept: per-frame close, replaced by stepShrink
-function followClose(ms, done) {
-  const t0 = performance.now();
-  const loop = () => {
-    const delta = document.body.scrollHeight - window.innerHeight;
-    window.pywebview.api.resize(Math.round(delta));
-    if (performance.now() - t0 < ms) requestAnimationFrame(loop);
-    else done();
-  };
-  requestAnimationFrame(loop);
-}
-
-function stepShrink(total, steps, ms, done) {
+// same idea as stepWidth: window and content move in lockstep, no CSS transition
+function stepHeight(from, to, steps, ms, wrap, done) {
   const t0 = performance.now();
   let last = -1;
-  let sent = 0;
   const loop = () => {
     const elapsed = performance.now() - t0;
     const step = Math.min(steps, Math.floor((elapsed / ms) * steps));
     if (step !== last) {
+      const prev = last < 0 ? from : from + (to - from) * last / steps;
+      const cur = from + (to - from) * step / steps;
+      window.pywebview.api.resize(Math.round(cur - prev));
+      wrap.style.height = Math.round(cur) + "px";
       last = step;
-      const target = -Math.round(total * step / steps);
-      window.pywebview.api.resize(target - sent);
-      sent = target;
     }
     if (elapsed < ms) requestAnimationFrame(loop);
     else if (done) done();
   };
   requestAnimationFrame(loop);
-}
-
-// unused fallback, kept: FLIP-style ghost close
-function collapsePathsGhost(wrap, h) {
-  const rect = wrap.getBoundingClientRect();
-  const ghost = document.createElement("div");
-  ghost.className = "paths-ghost";
-  ghost.style.left = rect.left + "px";
-  ghost.style.top = rect.top + "px";
-  ghost.style.width = rect.width + "px";
-  ghost.style.height = h + "px";
-  ghost.appendChild($("setuppaths").cloneNode(true));
-  document.body.appendChild(ghost);
-
-  wrap.style.transition = "none";
-  wrap.style.height = "0px";
-  void wrap.offsetHeight;
-  wrap.style.transition = "";
-  window.pywebview.api.resize(-h);
-  pathsBusy = false;
-
-  requestAnimationFrame(() => {
-    ghost.style.height = "0px";
-    ghost.style.opacity = "0";
-  });
-  setTimeout(() => ghost.remove(), PATHS_MS + 20);
 }
 
 $("pathstoggle").onclick = () => {
@@ -334,20 +390,12 @@ $("pathstoggle").onclick = () => {
   const wrap = $("pathswrap");
   const h = $("setuppaths").offsetHeight;
   if (pathsOpen) {
-    window.pywebview.api.resize(h);
-    wrap.style.height = h + "px";
-    setTimeout(() => {
+    stepHeight(0, h, PATHS_STEPS, PATHS_MS, wrap, () => {
       if (pathsOpen) wrap.style.height = "auto";
       pathsBusy = false;
-    }, PATHS_MS);
-  } else if (PATHS_CLOSE_ANIMATE) {
-    wrap.style.height = h + "px";
-    requestAnimationFrame(() => { wrap.style.height = "0px"; });
-    followClose(PATHS_MS, () => { pathsBusy = false; });
+    });
   } else {
-    wrap.style.height = h + "px";
-    requestAnimationFrame(() => { wrap.style.height = "0px"; });
-    stepShrink(h, PATHS_STEPS, PATHS_MS, () => { pathsBusy = false; });
+    stepHeight(h, 0, PATHS_STEPS, PATHS_MS, wrap, () => { pathsBusy = false; });
   }
 };
 
