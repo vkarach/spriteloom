@@ -6,6 +6,7 @@ import logging
 import pathlib
 import sys
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 
 import websockets
@@ -286,6 +287,8 @@ if __name__ == "__main__":
     logging.getLogger(
         "torch.distributed.elastic.multiprocessing.redirects"
     ).setLevel(logging.ERROR)
+    # bitsandbytes casts to fp16 for 8-bit matmul on purpose; not a bug
+    warnings.filterwarnings("ignore", message="MatMul8bitLt")
     try:
         asyncio.run(serve(host=HOST, port=load_port(), preload=True))
     except KeyboardInterrupt:

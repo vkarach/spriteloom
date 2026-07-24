@@ -16,6 +16,7 @@ output/
 build/
 dist/
 Spriteloom.exe
+*.exe.bak
 
 # disposable preview, regenerated from launcher/ui/index.html
 launcher/ui/preview.html

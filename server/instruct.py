@@ -209,6 +209,8 @@ class KleinPipeline:
         with _report_tqdm(report, weigh=weigh):
             self._pipe = build(torch, Flux2KleinPipeline)
         models.set_load_progress(1.0, "Finishing up")
+        # progress already goes to clients via callback_on_step_end
+        self._pipe.set_progress_bar_config(disable=True)
         self._pipe.vae.enable_slicing()
         gc.collect()
         torch.cuda.empty_cache()
@@ -354,6 +356,7 @@ class KleinPipeline:
                 prompt=prompt + T2I_SUFFIX,
                 width=w, height=h,
                 num_inference_steps=STEPS,
+                guidance_scale=GUIDANCE,
                 num_images_per_prompt=chunk,
                 generator=self._generators(seeds[len(out):len(out) + chunk]),
                 callback_on_step_end=self._cb(on_progress, len(out), chunk,

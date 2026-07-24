@@ -1,13 +1,14 @@
 """The launcher window: config, plugin install and server process, glued."""
 import pathlib
+import subprocess
 import sys
 import threading
-import webbrowser
 
 import webview
 
 from launcher import paths, plugin_install, server_proc, setup_checks, \
     setup_steps
+from launcher.server_proc import NO_WINDOW
 from launcher.paths import app_root
 from server.config import (HOST, VRAM_MODES, load_port, load_settings,
                            load_vram_mode, save_port, save_settings,
@@ -17,7 +18,7 @@ VERSION = "0.1.0"
 TITLE = "Spriteloom"
 NARROW = 476
 # the log panel adds this to the width when it's open
-LOGW = 360
+LOGW = 460
 WIDE = NARROW + LOGW
 # SetWindowPos sizes the outer window, not the client area; measured via
 # CDP, the border eats exactly this many px at any width
@@ -28,12 +29,12 @@ FIT_DEADBAND = 3
 HEIGHT_COMPACT = 360
 MIN_HEIGHT = 240
 MIN_SIZE = (NARROW, MIN_HEIGHT)
-SERVER_NEEDS = ("venv", "deps", "torch")
+SERVER_NEEDS = ("venv", "deps", "torch", "model")
+SERVER_NEEDS_LABELS = {"venv": "virtual env", "deps": "dependencies",
+                       "torch": "PyTorch", "model": "model"}
 MAX_SCREEN_FRACTION = 0.9
 POLL_SECONDS = 1.5
 OFFLINE = {"state": "offline", "progress": 0.0, "stage": None}
-NO_VENV = ("No .venv found in {root}. "
-           "Build the environment the way the README describes.")
 
 # must not be an Api attribute: pywebview walking it into js_api wedges the UI thread
 _window = None
@@ -88,12 +89,11 @@ class Api:
         self.items: list[dict] = []
         self.checking = False
         self.setup_log: list[str] = []
+        self.log_live = False
         self.step_state: dict[str, tuple] = {}
         self.was_running = False
         self.runner = setup_steps.Runner(self.paths, self._step_event,
                                          self._setup_log)
-        if server_proc.venv_python(self.root) is None:
-            self._say(NO_VENV.format(root=self.root), bad=True)
         threading.Thread(target=self._poll, daemon=True).start()
         self._start_check()
 
@@ -115,6 +115,7 @@ class Api:
     # ---- called from JS
 
     def state(self) -> dict:
+        self._refresh_live()
         return self._snapshot()
 
     def resize(self, delta: int) -> None:
@@ -140,8 +141,21 @@ class Api:
             _window.resize(w + CHROME_W, self.height)
 
     def open_url(self, url: str) -> None:
+        # webbrowser.open() is flaky from pywebview's JS-API thread
         if str(url).startswith(("http://", "https://")):
-            webbrowser.open(url)
+            try:
+                subprocess.run(["explorer", str(url)], creationflags=NO_WINDOW)
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+    def copy_to_clipboard(self, text: str) -> bool:
+        # clip.exe, not navigator.clipboard: that one skips Win+V history
+        try:
+            subprocess.run(["clip"], input=str(text), text=True, check=True,
+                           creationflags=NO_WINDOW)
+            return True
+        except (OSError, subprocess.SubprocessError):
+            return False
 
     def _server_ready(self) -> bool:
         state = {it["id"]: it["state"] for it in self.items}
@@ -155,9 +169,6 @@ class Api:
             self.proc.lines.append("-- stopped --")
             self.health = dict(OFFLINE)
             self._say("")
-            return self._snapshot()
-        if server_proc.venv_python(self.root) is None:
-            self._say(NO_VENV.format(root=self.root), bad=True)
             return self._snapshot()
         if not self._server_ready():
             self._say("Finish Setup first: install the missing pieces.",
@@ -189,9 +200,13 @@ class Api:
 
     # ---- setup wizard
 
-    def _setup_log(self, line: str) -> None:
-        self.setup_log.append(line)
-        del self.setup_log[:-200]
+    def _setup_log(self, line: str, replace: bool = False) -> None:
+        if replace and self.setup_log and self.log_live:
+            self.setup_log[-1] = line
+        else:
+            self.setup_log.append(line)
+            del self.setup_log[:-200]
+        self.log_live = replace
 
     def _step_event(self, step_id: str, state: str, detail: str) -> None:
         self.step_state[step_id] = (state, detail)
@@ -207,9 +222,15 @@ class Api:
             items = setup_checks.check_all(resolved)
             self.paths = resolved
             self.items = items
+            self.step_state = {}
             self.checking = False
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _refresh_live(self) -> None:
+        # plugin/model are filesystem-only, cheap to re-check every poll
+        if self.items and not self.runner.is_running() and not self.checking:
+            self.items = setup_checks.refresh_live(self.items, self.paths)
 
     def recheck(self) -> dict:
         self._start_check()
@@ -221,6 +242,7 @@ class Api:
         if self.was_running and not running:
             self.was_running = False
             self._start_check()
+        self._refresh_live()
         rows = []
         for item in self.items:
             state, detail = self.step_state.get(item["id"], (None, ""))
@@ -270,6 +292,19 @@ class Api:
             self.paths = paths.resolve()
             self.step_state = {}
         return self.recheck()
+
+    def open_path(self, path: str) -> None:
+        if not path:
+            return
+        p = pathlib.Path(path)
+        try:
+            if p.is_dir():
+                subprocess.run(["explorer", str(p)], creationflags=NO_WINDOW)
+            else:
+                subprocess.run(["explorer", "/select,", str(p)],
+                               creationflags=NO_WINDOW)
+        except (OSError, subprocess.SubprocessError):
+            pass
 
     def reset_path(self, kind: str) -> dict:
         # drop the manual override so this path auto-detects again
@@ -333,6 +368,17 @@ class Api:
         text, warn, action = self._plugin_view()
         cold = any(item["required"] and item["state"] != setup_checks.OK
                    for item in self.items)
+        not_ready = self.items and not self.proc.is_alive() \
+            and not self._server_ready()
+        hint = self.hint
+        if not_ready:
+            state = {it["id"]: it["state"] for it in self.items}
+            missing = [SERVER_NEEDS_LABELS[k] for k in SERVER_NEEDS
+                      if state.get(k) != setup_checks.OK]
+            listed = (missing[0] if len(missing) < 2 else
+                     ", ".join(missing[:-1]) + " and " + missing[-1])
+            hint = f"Install {listed} to start."
+        hint_bad = True if not_ready else self.hint_bad
         return {
             "version": VERSION,
             "cold": cold,
@@ -342,8 +388,8 @@ class Api:
             "progress": progress,
             "running": self.proc.is_alive(),
             "can_start": self._server_ready(),
-            "hint": self.hint,
-            "hint_bad": self.hint_bad,
+            "hint": hint,
+            "hint_bad": hint_bad,
             "vram_mode": load_vram_mode(),
             "plugin_text": text,
             "plugin_warn": warn,

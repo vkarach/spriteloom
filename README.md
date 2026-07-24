@@ -54,7 +54,7 @@ a lightweight tool:
 | OS | Windows |
 | Python | 3.11+ |
 | Aseprite | 1.3+ |
-| Disk | ~15 GB for the model (downloaded on first use) |
+| Disk | ~15 GB for the model (downloaded during Setup) |
 
 No NVIDIA GPU with enough VRAM, no Spriteloom. There is no CPU fallback
 and no cloud option by design — the whole point is that it runs locally.
@@ -65,14 +65,17 @@ and no cloud option by design — the whole point is that it runs locally.
    [Releases page](https://github.com/vkarach/spriteloom/releases) and
    unzip it anywhere. It has `Spriteloom.exe`, `server/`, and `plugin/`
    together; nothing else to fetch first.
-2. Run `Spriteloom.exe`, then press **Setup**. It shows what is missing:
-   the environment, the dependencies, PyTorch, the plugin, the model.
-3. Tick what you want and press **Install selected**. It builds the `.venv`,
-   installs the packages and the plugin, and prints a live log. Restart
-   Aseprite once the plugin is in.
+2. Windows will likely show a "Windows protected your PC" SmartScreen
+   warning — `Spriteloom.exe` isn't code-signed, so it has no reputation
+   yet. Click **More info**, then **Run anyway**.
+3. Press **Setup**. It shows what is missing: the environment, PyTorch,
+   the dependencies, the plugin, the model (~15 GB).
+4. Tick everything and press **Install selected**. It builds the `.venv`,
+   installs the packages and the plugin, downloads the model, and prints
+   a live log. Restart Aseprite once the plugin is in.
 
-The model (~15 GB) is unticked by default; leave it, and the server downloads
-it the first time you run a task, or tick it to fetch it up front.
+**Start** stays disabled until every required piece — including the model —
+is in place; there is no lazy first-run download.
 
 If you would rather do it by hand:
 
