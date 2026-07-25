@@ -397,8 +397,9 @@
       <h2 class="section-title">How it works</h2>
       <p class="section-sub">
         A Lua extension in Aseprite talks over WebSocket to a local Python
-        server that keeps one model resident on the GPU. After the first
-        warm up there are no model swaps, so tasks respond in seconds.
+        server that keeps one model warm on the GPU. After the first warm
+        up there are no model swaps, so tasks on 12+ GB cards respond in
+        seconds — 8&nbsp;GB cards (Legacy 8&nbsp;GB mode) take longer per task.
       </p>
       <div class="pipe">
         <div class="node">
@@ -416,7 +417,7 @@
         <div class="node">
           <div class="k">FLUX.2 Klein · GPU</div>
           <div class="v">The model</div>
-          <div class="d">One 4B parameter pipeline, always resident. First load downloads ~15&nbsp;GB; then it stays warm.</div>
+          <div class="d">One 4B parameter pipeline, warmed up once. First load downloads ~15&nbsp;GB; on 12+ GB cards it then stays fully resident, on 8&nbsp;GB cards (Legacy 8&nbsp;GB mode) it streams layer-by-layer per task instead.</div>
         </div>
       </div>
     </div>
@@ -432,17 +433,24 @@
         capable GPU. Check the spec before you install.
       </p>
       <div class="spec">
-        <div class="row"><div class="k">GPU</div><div class="v"><strong>NVIDIA, 12+ GB VRAM</strong> · developed on an RTX 5080</div></div>
+        <div class="row"><div class="k">GPU</div><div class="v"><strong>NVIDIA, 12+ GB VRAM</strong> · developed on an RTX 5080; 8&nbsp;GB cards work in Legacy 8&nbsp;GB mode</div></div>
         <div class="row"><div class="k">OS</div><div class="v">Windows</div></div>
         <div class="row"><div class="k">Python</div><div class="v">3.11 or newer</div></div>
         <div class="row"><div class="k">Aseprite</div><div class="v">1.3 or newer</div></div>
         <div class="row"><div class="k">Disk</div><div class="v">~15 GB for the model, downloaded on first run</div></div>
       </div>
       <div class="warn">
-        No NVIDIA GPU with enough VRAM, no Spriteloom. There is no cloud
-        option by design. If that's a dealbreaker, this tool isn't for you,
-        and that's fine.
+        No NVIDIA GPU, no Spriteloom. There is no cloud option by design.
+        If that's a dealbreaker, this tool isn't for you, and that's fine.
       </div>
+      <p class="section-sub" style="margin-top:20px">
+        <strong>Legacy 8&nbsp;GB mode</strong> (e.g. a laptop RTX 4060): the
+        ~8&nbsp;GB transformer doesn't fit on the GPU whole, so it swaps one
+        layer onto the GPU at a time, out to system RAM the rest of the run.
+        Same output as the 12+ GB path, just much slower per image. VRAM and
+        GPU usage both stay low the whole time; the constant PCIe transfer,
+        not compute, is what makes it slow.
+      </p>
     </div>
   </section>
 

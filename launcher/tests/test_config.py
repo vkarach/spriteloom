@@ -51,9 +51,15 @@ def test_port_and_vram_mode_coexist(tmp_path):
 
 def test_save_vram_mode_rejects_unknown(tmp_path):
     path = tmp_path / "config.json"
-    config.save_vram_mode("fp8", path)
+    config.save_vram_mode("offload", path)
     config.save_vram_mode("turbo", path)
-    assert config.load_vram_mode(path) == "fp8"
+    assert config.load_vram_mode(path) == "offload"
+
+
+def test_save_vram_mode_rejects_disabled_fp8(tmp_path):
+    path = tmp_path / "config.json"
+    config.save_vram_mode("fp8", path)
+    assert config.load_vram_mode(path) == "auto"
 
 
 def test_load_settings_fills_missing_keys(tmp_path):

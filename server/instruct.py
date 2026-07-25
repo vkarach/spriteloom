@@ -246,8 +246,10 @@ class KleinPipeline:
             return pipe
 
     def _build_fp8(self, torch, Pipe):
-        """8 GB resident: float8 weight-only transformer + 8-bit text encoder.
-        Near-lossless on Ada/Blackwell FP8 cores; unverified on this model."""
+        """Disabled: not reachable via VRAM_MODES/settings, kept for reference.
+        Weight-only fp8 needs torch.compile for the fused kernels that give
+        the actual speedup; without it this dequantizes to bf16 per matmul,
+        so it measured as slow as offload while staying just as VRAM-tight."""
         from diffusers import PipelineQuantizationConfig
         from diffusers.quantizers.quantization_config import TorchAoConfig
         from torchao.quantization import Float8WeightOnlyConfig
@@ -263,8 +265,9 @@ class KleinPipeline:
         return self._to_cuda(pipe)
 
     def _build_offload(self, torch, Pipe):
-        """8 GB lossless: bf16 weights streamed module-by-module off the GPU.
-        Slower but keeps output identical to bf16."""
+        """8 GB lossless: bf16 weights streamed layer-by-layer off the GPU.
+        The transformer alone is ~8 GB bf16, so whole-submodule offload
+        doesn't fit here; this is slower but the only granularity that does."""
         pipe = Pipe.from_pretrained(
             MODEL_ID, torch_dtype=torch.bfloat16,
             cache_dir=self.models_dir)

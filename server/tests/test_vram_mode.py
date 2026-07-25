@@ -4,7 +4,7 @@ GIB = 1024 ** 3
 
 
 def test_explicit_mode_ignores_vram():
-    for mode in ("bf16", "fp8", "offload"):
+    for mode in ("bf16", "offload"):
         assert resolve_mode(mode, 4 * GIB) == mode
         assert resolve_mode(mode, 24 * GIB) == mode
 
@@ -27,6 +27,5 @@ def test_bf16_keeps_the_current_chunk_sizes():
 
 
 def test_low_vram_modes_shrink_chunks():
-    for mode in ("fp8", "offload"):
-        assert chunk_size(mode, "t2i") == 2
-        assert chunk_size(mode, "edit") == 1
+    assert chunk_size("offload", "t2i") == 2
+    assert chunk_size("offload", "edit") == 1

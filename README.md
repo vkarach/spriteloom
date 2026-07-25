@@ -50,14 +50,33 @@ a lightweight tool:
 
 | | Requirement |
 |---|---|
-| GPU | **NVIDIA, 12+ GB VRAM** (developed on an RTX 5080) |
+| GPU | **NVIDIA, 12+ GB VRAM** (developed on an RTX 5080); 8 GB GPUs work too, in **Legacy 8 GB mode** — see below |
 | OS | Windows |
 | Python | 3.11+ |
 | Aseprite | 1.3+ |
 | Disk | ~15 GB for the model (downloaded during Setup) |
 
-No NVIDIA GPU with enough VRAM, no Spriteloom. There is no CPU fallback
-and no cloud option by design — the whole point is that it runs locally.
+No NVIDIA GPU, no Spriteloom. There is no CPU fallback and no cloud
+option by design — the whole point is that it runs locally.
+
+### VRAM modes
+
+Setup's **VRAM mode** dropdown picks how the ~8 GB transformer is fit onto
+the GPU:
+
+- **Auto** (default) — detects free VRAM and picks bf16 on 12+ GB cards,
+  Legacy 8 GB mode below that.
+- **bf16** — the whole model stays resident on the GPU. Fastest; needs 12+ GB
+  free VRAM.
+- **Legacy 8 GB mode** — for 8 GB cards (e.g. a laptop RTX 4060). The model
+  doesn't fit on the GPU all at once, so it moves one layer onto the GPU
+  right before that layer runs, then swaps it back out to system RAM. VRAM
+  usage stays low the whole time (one layer resident, not the whole model),
+  and so does GPU utilization: most of the time goes to shuttling weights
+  over PCIe, not to compute, and that is the actual reason this is slow.
+  Output is identical to bf16, just much slower. There is no faster 8 GB
+  path currently. An fp8-quantized mode was tried and measured no better
+  than this, while adding a real quality risk, so it was dropped.
 
 ## Install
 
@@ -125,9 +144,10 @@ Aseprite plugin (Lua)  <--WebSocket-->  Python server  -->  FLUX.2 Klein (GPU)
    history, layer insert                 postprocess         model, no swaps
 ```
 
-- **One model, always resident.** Every task hits the same FLUX.2 Klein
-  pipeline, so there is no per-task load/unload — after the first warm-up,
-  latency is dominated by inference, not I/O.
+- **One model, one warm-up.** Every task hits the same FLUX.2 Klein pipeline,
+  so there is no per-task load/unload. On 12+ GB cards it stays fully
+  resident; on 8 GB cards (Legacy 8 GB mode) each layer streams to the GPU
+  per task instead, which is where that mode's extra time goes.
 - **WebSocket protocol** with request validation at the boundary and
   streamed progress messages back to the plugin (`server/protocol.py`,
   `server/main.py`).

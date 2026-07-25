@@ -6,7 +6,7 @@ import pathlib
 DEFAULT_PORT = 8765
 HOST = "127.0.0.1"
 
-VRAM_MODES = ("auto", "bf16", "fp8", "offload")
+VRAM_MODES = ("auto", "bf16", "offload")  # fp8 disabled, see instruct.py
 DEFAULT_VRAM_MODE = "auto"
 
 SETTING_KEYS = ("port", "vram_mode", "root", "python", "aseprite_dir",
