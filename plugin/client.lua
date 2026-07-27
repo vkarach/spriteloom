@@ -139,9 +139,9 @@ function M.ping(onOk, onFail)
   }
   pingWs = ws
   if Timer then
-    -- a dead server never fires CLOSE; close on timeout so it stops retrying
+    -- a dead server never fires CLOSE; 1s catches that without punishing a live one
     pingTimer = Timer{
-      interval = 5.0,
+      interval = 1.0,
       ontick = function()
         if pingState == "connecting" then
           pingDrop(onFail, OFFLINE)

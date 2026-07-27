@@ -13,6 +13,10 @@ local history = moduleFrom("history.lua")
 
 local D = {}
 
+-- stages with no real fraction ever (server never gives them a ceiling)
+local INDETERMINATE_STAGES = { ["Importing torch"] = true,
+                               ["Reading model files"] = true }
+
 -- Settings survive across reopenings of the panel.
 local last = { mode = "Generate", prompt = "", w = nil, h = nil,
                variants = 4, background = "Auto", seed = "",
@@ -78,12 +82,25 @@ function D.open()
   local updateHint, retunePing, syncButtons
   local sizeTimer
   local animTimer   -- drives the busy animation only while running
+  local warmTimer   -- drives the indeterminate-sweep repaint while warming
   local baseW, baseH  -- baseW fixed after open; baseH nil = re-capture height
   local topX, topY    -- anchored top-left so relayouts grow only downward
 
   local dlg
 
   local function repaint() dlg:repaint() end
+
+  -- drives the sweep repaint; no "running" job means no animTimer for that
+  local function syncWarmTimer()
+    if not Timer then return end
+    if serverStatus == "warming" and not warmTimer then
+      warmTimer = Timer{ interval = 0.08, ontick = repaint }
+      warmTimer:start()
+    elseif serverStatus ~= "warming" and warmTimer then
+      warmTimer:stop()
+      warmTimer = nil
+    end
+  end
 
   local function checkServer()
     if pingBusy and os.time() - pingAt < 8 then return end
@@ -103,6 +120,7 @@ function D.open()
         end
         retunePing()
         syncButtons()
+        syncWarmTimer()
         repaint()
       end,
       function(_, hard)
@@ -116,6 +134,7 @@ function D.open()
         end
         retunePing()
         syncButtons()
+        syncWarmTimer()
         repaint()
       end)
   end
@@ -385,6 +404,21 @@ function D.open()
     return bx, by, bw, bh
   end
 
+  -- a bouncing segment for stages with no real fraction to show
+  local function paintSweep(gc, face, label)
+    local bx, by, bw, bh = paintBar(gc, face, 0, nil)
+    local seg = math.floor((bw - 2) * 0.25)
+    local ph = (os.clock() * 0.8) % 1
+    local tri = ph < 0.5 and (ph * 2) or (2 - ph * 2)
+    gc.color = ui.shade(face, 0.55)
+    gc:fillRect(Rectangle(bx + 1 + math.floor((bw - 2 - seg) * tri),
+                          by + 1, seg, bh - 2))
+    if label then
+      gc.color = ui.shade(ui.text(), 0.75)
+      gc:fillText(label, bx, 38)
+    end
+  end
+
   local function paintChecklist(gc, face)
     local textCol = ui.text()
     local guide = ui.shade(face, 0.70)
@@ -490,21 +524,23 @@ function D.open()
         gc:fillText(string.format("%d%%", math.floor(progress * 100)),
                     math.floor(STATUS_W / 2) - 8, 38)
       elseif serverStatus == "warming" then
-        paintBar(gc, face, loadProgress, loadLabel)  -- queued behind the load
+        -- queued behind the load
+        if INDETERMINATE_STAGES[loadStage] then
+          paintSweep(gc, face, loadStage or "Starting")
+        else
+          paintBar(gc, face, loadProgress, loadLabel)
+        end
       else
-        -- contacting the server: a sweeping segment, nothing to measure yet
-        local bx, by, bw, bh = paintBar(gc, face, 0, nil)
-        local seg = math.floor((bw - 2) * 0.25)
-        local ph = (os.clock() * 0.8) % 1
-        local tri = ph < 0.5 and (ph * 2) or (2 - ph * 2)
-        gc.color = ui.shade(face, 0.55)
-        gc:fillRect(Rectangle(bx + 1 + math.floor((bw - 2 - seg) * tri),
-                              by + 1, seg, bh - 2))
+        paintSweep(gc, face, nil)  -- contacting the server, nothing to measure
       end
     elseif serverStatus == "warming" then
       -- exactly what the server console shows: the bar fills for the
       -- current stage and resets on the next one
-      paintBar(gc, face, loadProgress, loadLabel)
+      if INDETERMINATE_STAGES[loadStage] then
+        paintSweep(gc, face, loadStage or "Starting")
+      else
+        paintBar(gc, face, loadProgress, loadLabel)
+      end
     elseif serverStatus ~= "checking" and serverStatus ~= "offline" then
       paintChecklist(gc, face)  -- offline/checking: the line says it all
     end
@@ -518,6 +554,7 @@ function D.open()
       if pingTimer then pingTimer:stop() end
       if sizeTimer then sizeTimer:stop() end
       if animTimer then animTimer:stop() end
+      if warmTimer then warmTimer:stop() end
       client.pingClose()
       if job and state == "running" then job.cancel() end
     end,
