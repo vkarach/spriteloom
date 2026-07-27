@@ -231,7 +231,7 @@ class KleinPipeline:
         self._resolved = None
         self._pipe = None
 
-    def _preflight(self):
+    def _preflight(self, free_vram=None, total_vram=None):
         """Fail with a clear reason before a doomed load, not a native crash."""
         snap = snapshot_dir(self.models_dir)
         if snap is None:
@@ -264,11 +264,15 @@ class KleinPipeline:
                 text_encoder += expected
         log.info("model files complete (%s on disk)", _gb(total))
 
+        vram = (f", {_gb(free_vram)} VRAM free of {_gb(total_vram)}"
+               if free_vram is not None else "")
         mem = memory_status()
         if mem is None:
+            if vram:
+                log.info("memory: %s", vram.lstrip(", "))
             return
-        log.info("memory: %s RAM free, %s committable (RAM + page file)",
-                 _gb(mem["free_ram"]), _gb(mem["free_commit"]))
+        log.info("memory: %s RAM free, %s committable (RAM + page file)%s",
+                 _gb(mem["free_ram"]), _gb(mem["free_commit"]), vram)
         if self._resolved != "offload":
             return  # bf16 lives on the GPU; system RAM is not the bottleneck
         # offload holds the model in RAM; an uncommittable component segfaults
@@ -291,6 +295,7 @@ class KleinPipeline:
         if self._pipe is not None:
             return
         from server import models
+        log.info("Importing torch...")
         models.set_load_progress(0.0, "Importing torch")
         import gc
         import torch
@@ -300,11 +305,15 @@ class KleinPipeline:
         logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
         # benign per-matmul notice that 8-bit casts bf16 inputs to fp16
         logging.getLogger("bitsandbytes.autograd._functions").setLevel(logging.ERROR)
-        free = torch.cuda.mem_get_info()[0] if torch.cuda.is_available() else 0
+        cuda = torch.cuda.is_available()
+        free, total_vram = torch.cuda.mem_get_info() if cuda else (0, None)
         self._resolved = resolve_mode(self.mode, free)
-        log.info("loading %s (mode %s -> %s)...",
-                 MODEL_ID, self.mode, self._resolved)
-        self._preflight()
+        mode_desc = (f"auto (selected {self._resolved})" if self.mode == "auto"
+                    else self._resolved)
+        log.info("mode %s", mode_desc)
+        log.info("loading %s...", MODEL_ID)
+        self._preflight(free_vram=free if cuda else None, total_vram=total_vram)
+        log.info("Reading model files...")
         models.set_load_progress(0.0, "Reading model files")
         builders = {"offload": self._build_offload}
         build = builders.get(self._resolved, self._build_bf16)
@@ -317,6 +326,7 @@ class KleinPipeline:
                 ceiling=None if ceiling is None else ceiling * READ_SPAN)
         with _report_tqdm(report, weigh=weigh):
             self._pipe = build(torch, Flux2KleinPipeline)
+        log.info("Finishing up...")
         models.set_load_progress(1.0, "Finishing up")
         # progress already goes to clients via callback_on_step_end
         self._pipe.set_progress_bar_config(disable=True)
@@ -327,6 +337,7 @@ class KleinPipeline:
 
     def _to_cuda(self, pipe):
         from server import models
+        log.info("Moving model to GPU...")
         models.set_load_progress(READ_SPAN, "Moving model to GPU",
                                  ceiling=0.99)
         return pipe.to("cuda")
