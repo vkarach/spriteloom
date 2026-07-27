@@ -50,6 +50,22 @@ def downscale(img: Image.Image, target_size: tuple[int, int],
     return Image.fromarray(out.reshape(th, tw, 4), "RGBA")
 
 
+KEY_COLORS = ((255, 0, 255), (0, 255, 0), (0, 255, 255), (255, 255, 0),
+              (255, 0, 0), (0, 0, 255))
+
+
+def key_color(img: Image.Image) -> tuple[int, int, int]:
+    """Chroma-key background for an edit frame: the candidate farthest from the
+    sprite's own colors, so the flood fill cannot crawl along matching outlines."""
+    arr = np.asarray(img.convert("RGBA")).reshape(-1, 4)
+    used = arr[arr[:, 3] > 0][:, :3].astype(np.int32)
+    if len(used) == 0:
+        return KEY_COLORS[0]
+    keys = np.asarray(KEY_COLORS, dtype=np.int32)
+    gap = np.abs(used[:, None, :] - keys[None, :, :]).max(axis=2).min(axis=0)
+    return KEY_COLORS[int(gap.argmax())]
+
+
 def _used_colors(q: Image.Image, max_colors: int) -> list[tuple[int, int, int]]:
     """RGB of the palette entries a quantized image actually uses."""
     raw = q.getpalette()[: max_colors * 3]

@@ -16,8 +16,11 @@ from collections.abc import ItemsView
 
 from PIL import Image
 
+from server.postprocess import key_color
+
 MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
-STYLE_SUFFIX = ". Keep the same pixel art style, colors and character design."
+STYLE_SUFFIX = (". Keep the same pixel art style, colors and character design."
+                " Keep the plain solid background color exactly as it is.")
 STEPS = 8          # Klein is step-distilled; more steps drift toward realism
 GUIDANCE = 1.0
 T2I_SUFFIX = (" Flat 2D pixel art game sprite, crisp pixels, flat colors,"
@@ -118,6 +121,16 @@ def memory_status() -> dict | None:
 
 def _gb(n: float) -> str:
     return f"{n / 1024 ** 3:.1f} GB"
+
+
+def flatten_to_key(image):
+    """RGB copy on a chroma-key background; black would match pixel-art
+    outlines and the background flood would then eat them."""
+    rgba = image.convert("RGBA")
+    key = key_color(rgba)
+    flat = Image.new("RGB", rgba.size, key)
+    flat.paste(rgba, (0, 0), rgba)
+    return flat, key
 
 
 def _cum_weights(bar, weigh):
@@ -418,13 +431,13 @@ class KleinPipeline:
     def _prep_input(image):
         """Integer-factor upscale + pad to model-friendly dims; a fractional
         upscale shows stretched pixels and comes back off-grid and wobbly."""
-        rgb = image.convert("RGB")
-        w, h = rgb.size
+        flat, key = flatten_to_key(image)
+        w, h = flat.size
         k = max(1, MAX_SIDE // max(w, h))
-        big = rgb.resize((w * k, h * k), Image.NEAREST)
+        big = flat.resize((w * k, h * k), Image.NEAREST)
         pw = -(-big.width // 16) * 16
         ph = -(-big.height // 16) * 16
-        canvas = Image.new("RGB", (pw, ph), (0, 0, 0))
+        canvas = Image.new("RGB", (pw, ph), key)
         canvas.paste(big, (0, 0))
         return canvas, (big.width, big.height)
 
@@ -456,7 +469,9 @@ class KleinPipeline:
         """Klein edits the whole frame; only the masked region is kept."""
         edits = self.edit_by_instruction(prompt, image, variants=variants,
                                          on_progress=on_progress, seeds=seeds)
-        big_src = image.convert("RGBA").resize(edits[0].size, Image.NEAREST)
+        # the kept region needs the edit's key background, not black
+        src = flatten_to_key(image)[0].convert("RGBA")
+        big_src = src.resize(edits[0].size, Image.NEAREST)
         big_mask = mask.convert("L").resize(edits[0].size, Image.NEAREST)
         out = []
         for e in edits:
