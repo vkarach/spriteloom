@@ -245,6 +245,9 @@ details[open] summary::before { content: "\25BE"; }
   user-select: text; -webkit-user-select: text;
 }
 #logbox.empty { color: var(--ink-faint); font-style: italic; user-select: none; }
+/* color only the level token so ERROR/WARNING lines catch the eye */
+#logbox .lvl-error { color: var(--danger); font-weight: 700; }
+#logbox .lvl-warn { color: var(--gold); font-weight: 700; }
 /* :not([hidden]) so the hidden attribute still wins */
 #main-view:not([hidden]) {
   display: flex; flex-direction: column; min-height: 350px;

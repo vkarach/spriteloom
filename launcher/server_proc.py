@@ -16,6 +16,8 @@ from server.config import HOST
 
 MAX_LINES = 500
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+# a tqdm bar; text-mode reads split its \r redraws into separate lines
+_BAR = re.compile(r"^(.+?):\s*\d+%\|")
 # no console window when a windowed exe spawns the server
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -182,6 +184,13 @@ class ServerProcess:
             line = clean_line(raw)
             if not line:
                 continue
+            bar = _BAR.match(line)
+            if bar and self.lines:
+                prev = _BAR.match(self.lines[-1])
+                if prev and prev.group(1) == bar.group(1):
+                    self.lines[-1] = line  # same bar redrawing: update in place
+                    self.on_log(line)
+                    continue
             self.lines.append(line)
             del self.lines[:-MAX_LINES]
             self.on_log(line)

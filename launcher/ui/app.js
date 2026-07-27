@@ -12,6 +12,7 @@ function apiCall(fn) {
 const NARROW = 476, LOGW = 460, WIDE = NARROW + LOGW;
 
 let lastLog = "";
+let lastPainted = null;
 let logHad = false;
 let logOpen = false;
 let logStarted = false;
@@ -40,6 +41,7 @@ function stepWidth(from, to, steps, ms, done) {
 }
 
 function setLogOpen(open) {
+  if (open === logOpen) return;  // already there: don't replay the slide
   logOpen = open;
   $("rail").classList.toggle("open", logOpen);
   $("logpanel").classList.toggle("open", logOpen);
@@ -47,13 +49,29 @@ function setLogOpen(open) {
   else stepWidth(WIDE, NARROW, LOG_STEPS, LOG_MS);
 }
 
+function escapeHTML(s) {
+  return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+// wrap only the leading level token so ERROR/WARNING lines stand out
+function logHTML(text) {
+  return text.split("\n").map((line) => {
+    const m = line.match(/^(ERROR|CRITICAL|WARNING|Warning)\b/);
+    if (!m) return escapeHTML(line);
+    const cls = /^(ERROR|CRITICAL)/.test(m[1]) ? "lvl-error" : "lvl-warn";
+    return `<span class="${cls}">${m[1]}</span>` + escapeHTML(line.slice(m[1].length));
+  }).join("\n");
+}
+
 function paintLog() {
   if (!logOpen) return;
   const box = $("logbox");
   const text = lastLog || "Nothing logged yet.";
-  if (box.textContent === text) return;
+  if (lastPainted === text) return;
   const stuck = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
-  box.textContent = text;
+  lastPainted = text;
+  if (lastLog) box.innerHTML = logHTML(text);
+  else box.textContent = text;
   box.classList.toggle("empty", !lastLog);
   if (stuck) box.scrollTop = box.scrollHeight;
 }

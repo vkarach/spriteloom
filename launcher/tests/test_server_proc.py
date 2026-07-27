@@ -31,6 +31,31 @@ def test_clean_line_blank_stays_blank():
     assert server_proc.clean_line("\r\n") == ""
 
 
+class _FakeProc:
+    def __init__(self, raws):
+        self.stdout = iter(raws)
+
+
+def test_pump_collapses_one_bar_into_a_single_line(tmp_path):
+    proc = server_proc.ServerProcess(tmp_path, 8765, on_log=lambda line: None)
+    proc.proc = _FakeProc(["Loading weights:   0%|  | 0/398\n",
+                           "Loading weights:  10%|# | 40/398\n",
+                           "Loading weights: 100%|##| 398/398\n",
+                           "done loading\n"])
+    proc._pump()
+    assert proc.lines == ["Loading weights: 100%|##| 398/398", "done loading"]
+
+
+def test_pump_keeps_distinct_bars_apart(tmp_path):
+    proc = server_proc.ServerProcess(tmp_path, 8765, on_log=lambda line: None)
+    proc.proc = _FakeProc(["Loading pipeline components...:  20%|# | 1/5\n",
+                           "Loading weights:  50%|##| 200/398\n",
+                           "Loading weights: 100%|##| 398/398\n"])
+    proc._pump()
+    assert proc.lines == ["Loading pipeline components...:  20%|# | 1/5",
+                          "Loading weights: 100%|##| 398/398"]
+
+
 def test_venv_python_found(tmp_path):
     scripts = tmp_path / ".venv" / "Scripts"
     scripts.mkdir(parents=True)
