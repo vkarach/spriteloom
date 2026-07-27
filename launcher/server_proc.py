@@ -15,9 +15,31 @@ import websockets
 from server.config import HOST
 
 MAX_LINES = 500
+BAR_WIDTH = 16
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-# a tqdm bar; text-mode reads split its \r redraws into separate lines
-_BAR = re.compile(r"^(.+?):\s*\d+%\|")
+# a tqdm bar (desc, pct, n, total, remaining); text-mode splits its \r redraws
+_BAR = re.compile(
+    r"^(.+?):\s*(\d+)%\|[^|]*\|\s*(\d+)/(\d+)(?:\s*\[[^<\]]*<([^,\]]+))?")
+# a bar we already formatted; captures its description for in-place updates
+_FMT_BAR = re.compile(r"^(.+?):\s*\d+% \[")
+# no per-item data past text_encoder; the count/percent here is misleading
+_NO_BAR_DESCS = {"Loading pipeline components..."}
+
+
+def format_bar(m) -> str:
+    """A matched tqdm bar redrawn clean: fixed width, percent, count, and ETA."""
+    if m.group(1) in _NO_BAR_DESCS:
+        return m.group(1)
+    pct = int(m.group(2))
+    filled = round(pct / 100 * BAR_WIDTH)
+    bar = "#" * filled + " " * (BAR_WIDTH - filled)
+    out = f"{m.group(1)}: {pct:>3}% [{bar}] {m.group(3)}/{m.group(4)}"
+    eta = m.group(5)
+    if pct < 100 and eta and eta.strip() != "?":
+        out += f" ETA {eta.strip()}"
+    return out
+
+
 # no console window when a windowed exe spawns the server
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -176,6 +198,21 @@ class ServerProcess:
         assign_to_job(self.job, self.proc.pid)
         threading.Thread(target=self._pump, daemon=True).start()
 
+    def _bar_line_index(self, desc: str):
+        """Index of the same-named bar in the trailing run of bar lines, if any."""
+        for i in range(len(self.lines) - 1, -1, -1):
+            line = self.lines[i]
+            if line in _NO_BAR_DESCS:
+                cur = line
+            else:
+                m = _FMT_BAR.match(line)
+                if not m:
+                    return None
+                cur = m.group(1)
+            if cur == desc:
+                return i
+        return None
+
     def _pump(self) -> None:
         proc = self.proc
         if not proc or not proc.stdout:
@@ -185,12 +222,16 @@ class ServerProcess:
             if not line:
                 continue
             bar = _BAR.match(line)
-            if bar and self.lines:
-                prev = _BAR.match(self.lines[-1])
-                if prev and prev.group(1) == bar.group(1):
-                    self.lines[-1] = line  # same bar redrawing: update in place
-                    self.on_log(line)
-                    continue
+            if bar:
+                formatted = format_bar(bar)
+                idx = self._bar_line_index(bar.group(1))
+                if idx is not None:
+                    self.lines[idx] = formatted  # same bar redrawing in place
+                else:
+                    self.lines.append(formatted)
+                    del self.lines[:-MAX_LINES]
+                self.on_log(formatted)
+                continue
             self.lines.append(line)
             del self.lines[:-MAX_LINES]
             self.on_log(line)

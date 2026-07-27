@@ -9,7 +9,7 @@ function apiCall(fn) {
   return result;
 }
 // must match --seam in style.css and NARROW in app.py
-const NARROW = 476, LOGW = 460, WIDE = NARROW + LOGW;
+const NARROW = 476, LOGW = 476, WIDE = NARROW + LOGW;
 
 let lastLog = "";
 let lastPainted = null;
@@ -56,6 +56,7 @@ function escapeHTML(s) {
 // wrap only the leading level token so ERROR/WARNING lines stand out
 function logHTML(text) {
   return text.split("\n").map((line) => {
+    if (line === "-- stopped --") return `<div class="stopped">${line}</div>`;
     const m = line.match(/^(ERROR|CRITICAL|WARNING|Warning)\b/);
     if (!m) return escapeHTML(line);
     const cls = /^(ERROR|CRITICAL)/.test(m[1]) ? "lvl-error" : "lvl-warn";

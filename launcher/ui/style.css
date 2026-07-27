@@ -7,6 +7,8 @@
   --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   /* must match NARROW in app.js and app.py */
   --seam: 476px;
+  /* must match LOGW in app.js and app.py */
+  --logw: 476px;
   --rail-w: 16px;
 }
 * { box-sizing: border-box; }
@@ -223,7 +225,7 @@ details[open] summary::before { content: "\25BE"; }
 #rail.open .chev { transform: rotate(135deg); }
 /* left:var(--seam), not right:0 -- right:0 would drag it with a narrowing window */
 #logpanel {
-  position: fixed; top: 0; bottom: 0; left: var(--seam); width: 460px; z-index: 2;
+  position: fixed; top: 0; bottom: 0; left: var(--seam); width: var(--logw); z-index: 2;
   display: flex; flex-direction: column;
   background: #0f1116; border-left: 1px solid var(--line);
   opacity: 0;
@@ -248,6 +250,7 @@ details[open] summary::before { content: "\25BE"; }
 /* color only the level token so ERROR/WARNING lines catch the eye */
 #logbox .lvl-error { color: var(--danger); font-weight: 700; }
 #logbox .lvl-warn { color: var(--gold); font-weight: 700; }
+#logbox .stopped { text-align: center; color: var(--ink-faint); margin-top: 6px; }
 /* :not([hidden]) so the hidden attribute still wins */
 #main-view:not([hidden]) {
   display: flex; flex-direction: column; min-height: 350px;

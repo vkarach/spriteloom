@@ -36,14 +36,43 @@ class _FakeProc:
         self.stdout = iter(raws)
 
 
+def _bar(pct):
+    filled = round(pct / 100 * server_proc.BAR_WIDTH)
+    return "#" * filled + " " * (server_proc.BAR_WIDTH - filled)
+
+
+def test_format_bar_is_clean_with_eta(tmp_path):
+    m = server_proc._BAR.match(
+        "Loading weights:  50%|#####3    | 199/398 [00:11<00:38,  9.03it/s]")
+    out = server_proc.format_bar(m)
+    assert out == f"Loading weights:  50% [{_bar(50)}] 199/398 ETA 00:38"
+    inside = out.split("[", 1)[1].split("]", 1)[0]
+    assert not any(c.isdigit() for c in inside)  # no tqdm partial-block digit
+
+
+def test_format_bar_omits_eta_when_unknown(tmp_path):
+    m = server_proc._BAR.match(
+        "Loading weights:   0%|          | 0/398 [00:00<?, ?it/s]")
+    assert server_proc.format_bar(m) == f"Loading weights:   0% [{_bar(0)}] 0/398"
+
+
+def test_format_bar_drops_percent_for_the_outer_components_bar(tmp_path):
+    # only text_encoder has real per-item data; the outer count jumps once
+    # the rest load atomically, so it shows no bar/percent at all
+    m = server_proc._BAR.match(
+        "Loading pipeline components...:  40%|####      | 2/5 [00:00<00:01]")
+    assert server_proc.format_bar(m) == "Loading pipeline components..."
+
+
 def test_pump_collapses_one_bar_into_a_single_line(tmp_path):
     proc = server_proc.ServerProcess(tmp_path, 8765, on_log=lambda line: None)
     proc.proc = _FakeProc(["Loading weights:   0%|  | 0/398\n",
                            "Loading weights:  10%|# | 40/398\n",
-                           "Loading weights: 100%|##| 398/398\n",
+                           "Loading weights: 100%|##| 398/398 [00:53<00:00]\n",
                            "done loading\n"])
     proc._pump()
-    assert proc.lines == ["Loading weights: 100%|##| 398/398", "done loading"]
+    done = f"Loading weights: 100% [{_bar(100)}] 398/398"
+    assert proc.lines == [done, "done loading"]
 
 
 def test_pump_keeps_distinct_bars_apart(tmp_path):
@@ -52,8 +81,24 @@ def test_pump_keeps_distinct_bars_apart(tmp_path):
                            "Loading weights:  50%|##| 200/398\n",
                            "Loading weights: 100%|##| 398/398\n"])
     proc._pump()
-    assert proc.lines == ["Loading pipeline components...:  20%|# | 1/5",
-                          "Loading weights: 100%|##| 398/398"]
+    outer = "Loading pipeline components..."
+    inner = f"Loading weights: 100% [{_bar(100)}] 398/398"
+    assert proc.lines == [outer, inner]
+
+
+def test_pump_folds_interleaved_bars_each_to_one_line(tmp_path):
+    proc = server_proc.ServerProcess(tmp_path, 8765, on_log=lambda line: None)
+    # the components bar and its per-component weights bar alternate; each must
+    # keep a single line, not spawn a line per step
+    proc.proc = _FakeProc(["Loading pipeline components...:  20%|#| 1/5\n",
+                           "Loading weights:  50%|#| 200/398\n",
+                           "Loading pipeline components...:  40%|#| 2/5\n",
+                           "Loading weights: 100%|#| 398/398\n",
+                           "Loading pipeline components...: 100%|#| 5/5\n"])
+    proc._pump()
+    comp = "Loading pipeline components..."
+    weights = f"Loading weights: 100% [{_bar(100)}] 398/398"
+    assert proc.lines == [comp, weights]
 
 
 def test_venv_python_found(tmp_path):

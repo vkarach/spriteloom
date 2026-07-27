@@ -17,8 +17,8 @@ from server.config import (HOST, VRAM_MODES, load_port, load_settings,
 VERSION = "0.1.0"
 TITLE = "Spriteloom"
 NARROW = 476
-# the log panel adds this to the width when it's open
-LOGW = 460
+# log panel width when open; matches NARROW so both panels are equal width
+LOGW = 476
 WIDE = NARROW + LOGW
 # SetWindowPos sizes the outer window, not the client area; measured via
 # CDP, the border eats exactly this many px at any width
