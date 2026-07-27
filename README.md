@@ -51,6 +51,7 @@ a lightweight tool:
 | | Requirement |
 |---|---|
 | GPU | **NVIDIA, 12+ GB VRAM** (developed on an RTX 5080); 8 GB GPUs work too, in **Legacy 8 GB mode** — see below |
+| RAM | **16 GB minimum.** Legacy 8 GB mode holds the whole ~16 GB model in system RAM, so free RAM plus the Windows page file must comfortably clear that — see below |
 | OS | Windows |
 | Python | 3.11+ |
 | Aseprite | 1.3+ |
@@ -77,6 +78,13 @@ the GPU:
   Output is identical to bf16, just much slower. There is no faster 8 GB
   path currently. An fp8-quantized mode was tried and measured no better
   than this, while adding a real quality risk, so it was dropped.
+
+  Legacy 8 GB mode keeps the whole ~16 GB model in **system RAM** (that is
+  where layers are swapped from). On a 16 GB machine that only fits with a
+  generous Windows page file, so leave it enabled and sized (or set it to
+  system-managed). If free RAM plus page file cannot cover the model the load
+  fails; the server now checks this at startup and prints why instead of
+  crashing.
 
 ## Install
 
@@ -227,6 +235,22 @@ agree.
 The server runs inside a Windows job object that dies with the launcher.
 That is what keeps a crashed or killed launcher from leaving a server behind
 holding your VRAM.
+
+## Troubleshooting
+
+If the server says it crashed or never finishes loading, run the built-in
+loader check from the install folder:
+
+```
+.venv\Scripts\python -m server.diagnose
+```
+
+It prints package versions, memory headroom, and whether the model files are
+complete, then loads the transformer on its own. `TRUNCATED` means the
+download was cut short — delete the model folder and re-download via Setup. A
+crash only in the full run, with the isolated load passing, is memory: close
+other apps or raise the Windows page file. The server runs the same file and
+memory checks at startup, so this is mainly for a closer look.
 
 ## License
 

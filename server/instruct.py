@@ -6,9 +6,12 @@ encoder takes 8-bit fine, and the bf16 transformer also edits faster than
 the 8-bit one did.
 """
 import contextlib
+import ctypes
+import json
 import logging
 import pathlib
 import random
+import sys
 from collections.abc import ItemsView
 
 from PIL import Image
@@ -25,7 +28,7 @@ T2I_SUFFIX = (" Flat 2D pixel art game sprite, crisp pixels, flat colors,"
 MAX_SIDE = 512
 
 # bf16 peaks ~13 GB; only 12+ GB cards get it. Below that, offload is the
-# lossless default (fp8 stays behind an explicit override until verified).
+# lossless default.
 BF16_MIN_FREE = 11 * 1024 ** 3
 
 # reading the files is the measured part of the load; the rest is the GPU copy
@@ -61,16 +64,60 @@ def t2i_size(target_size: tuple[int, int],
             max(16, round(h * scale / 16) * 16))
 
 
-def component_bytes(models_dir: str) -> dict:
-    """On-disk size of each pipeline component in the newest snapshot."""
+def snapshot_dir(models_dir: str) -> pathlib.Path | None:
+    """Newest local snapshot of the model, or None if nothing is downloaded."""
     root = (pathlib.Path(models_dir)
             / ("models--" + MODEL_ID.replace("/", "--")) / "snapshots")
     snaps = sorted((p for p in root.glob("*") if p.is_dir()),
                    key=lambda p: p.stat().st_mtime)
-    if not snaps:
+    return snaps[-1] if snaps else None
+
+
+def component_bytes(models_dir: str) -> dict:
+    """On-disk size of each pipeline component in the newest snapshot."""
+    snap = snapshot_dir(models_dir)
+    if snap is None:
         return {}
     return {d.name: sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
-            for d in snaps[-1].iterdir() if d.is_dir()}
+            for d in snap.iterdir() if d.is_dir()}
+
+
+def safetensors_expected_size(path: pathlib.Path) -> int:
+    """Total bytes the safetensors header declares; a shorter file is truncated."""
+    with open(path, "rb") as f:
+        header_len = int.from_bytes(f.read(8), "little")
+        header = json.loads(f.read(header_len))
+    end = max((v["data_offsets"][1] for k, v in header.items()
+               if k != "__metadata__" and isinstance(v, dict)), default=0)
+    return 8 + header_len + end
+
+
+def memory_status() -> dict | None:
+    """Physical and committable memory in bytes (RAM + page file), or None off Windows."""
+    if sys.platform != "win32":
+        return None
+
+    class _MemStatus(ctypes.Structure):
+        _fields_ = [("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+    s = _MemStatus()
+    s.dwLength = ctypes.sizeof(s)
+    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s))
+    return {"total_ram": s.ullTotalPhys, "free_ram": s.ullAvailPhys,
+            "total_commit": s.ullTotalPageFile,
+            "free_commit": s.ullAvailPageFile}
+
+
+def _gb(n: float) -> str:
+    return f"{n / 1024 ** 3:.1f} GB"
 
 
 def _cum_weights(bar, weigh):
@@ -184,6 +231,62 @@ class KleinPipeline:
         self._resolved = None
         self._pipe = None
 
+    def _preflight(self):
+        """Fail with a clear reason before a doomed load, not a native crash."""
+        snap = snapshot_dir(self.models_dir)
+        if snap is None:
+            raise RuntimeError(
+                "model is not downloaded yet; open Setup and download "
+                "FLUX.2 Klein before starting the server")
+        files = sorted(snap.rglob("*.safetensors"))
+        if not files:
+            raise RuntimeError(
+                f"no weight files under {snap}; the download is incomplete, "
+                "run Setup again")
+        log.info("checking %d model file(s)...", len(files))
+        total = largest = text_encoder = 0
+        for f in files:
+            actual = f.stat().st_size
+            try:
+                expected = safetensors_expected_size(f)
+            except (OSError, ValueError):
+                raise RuntimeError(
+                    f"{f.name} is unreadable or not valid safetensors; delete "
+                    "the model folder and re-download via Setup")
+            if actual < expected:
+                raise RuntimeError(
+                    f"{f.name} is incomplete ({_gb(actual)} of {_gb(expected)});"
+                    " the download was cut short. Delete the model folder and "
+                    "re-download via Setup")
+            total += expected
+            largest = max(largest, expected)
+            if f.parent.name == "text_encoder":
+                text_encoder += expected
+        log.info("model files complete (%s on disk)", _gb(total))
+
+        mem = memory_status()
+        if mem is None:
+            return
+        log.info("memory: %s RAM free, %s committable (RAM + page file)",
+                 _gb(mem["free_ram"]), _gb(mem["free_commit"]))
+        if self._resolved != "offload":
+            return  # bf16 lives on the GPU; system RAM is not the bottleneck
+        # offload holds the model in RAM; an uncommittable component segfaults
+        need = largest * 1.15
+        if mem["free_commit"] < need:
+            raise RuntimeError(
+                f"not enough memory to load the model: {_gb(mem['free_commit'])}"
+                f" committable, need at least {_gb(need)} for the largest "
+                "component. Close other apps or raise the Windows page file, "
+                "then start again")
+        # offload loads the text encoder 8-bit, so it costs ~half its bf16 size
+        resident = total - text_encoder / 2
+        if mem["free_commit"] < resident * 1.1:
+            log.warning(
+                "low memory headroom (%s free vs %s model); the load will page "
+                "to disk and run slowly. Raising the page file helps",
+                _gb(mem["free_commit"]), _gb(resident))
+
     def load(self):
         if self._pipe is not None:
             return
@@ -192,12 +295,18 @@ class KleinPipeline:
         import gc
         import torch
         from diffusers import Flux2KleinPipeline
+        # quiet third-party spam; set after import, the hub resets its own level
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+        # benign per-matmul notice that 8-bit casts bf16 inputs to fp16
+        logging.getLogger("bitsandbytes.autograd._functions").setLevel(logging.ERROR)
         free = torch.cuda.mem_get_info()[0] if torch.cuda.is_available() else 0
         self._resolved = resolve_mode(self.mode, free)
-        log.info("loading %s (mode %s -> %s; first run downloads ~15 GB)...",
+        log.info("loading %s (mode %s -> %s)...",
                  MODEL_ID, self.mode, self._resolved)
+        self._preflight()
         models.set_load_progress(0.0, "Reading model files")
-        builders = {"offload": self._build_offload, "fp8": self._build_fp8}
+        builders = {"offload": self._build_offload}
         build = builders.get(self._resolved, self._build_bf16)
         # two 7 GB components carry the wait; equal steps would misplace it
         sizes = component_bytes(self.models_dir)
@@ -245,34 +354,33 @@ class KleinPipeline:
             pipe.enable_model_cpu_offload()
             return pipe
 
-    def _build_fp8(self, torch, Pipe):
-        """Disabled: not reachable via VRAM_MODES/settings, kept for reference.
-        Weight-only fp8 needs torch.compile for the fused kernels that give
-        the actual speedup; without it this dequantizes to bf16 per matmul,
-        so it measured as slow as offload while staying just as VRAM-tight."""
-        from diffusers import PipelineQuantizationConfig
-        from diffusers.quantizers.quantization_config import TorchAoConfig
-        from torchao.quantization import Float8WeightOnlyConfig
-        from transformers import BitsAndBytesConfig
-        quant = PipelineQuantizationConfig(quant_mapping={
-            "transformer": TorchAoConfig(Float8WeightOnlyConfig()),
-            "text_encoder": BitsAndBytesConfig(load_in_8bit=True),
-        })
-        pipe = Pipe.from_pretrained(
-            MODEL_ID, torch_dtype=torch.bfloat16,
-            cache_dir=self.models_dir,
-            quantization_config=quant)
-        return self._to_cuda(pipe)
-
     def _build_offload(self, torch, Pipe):
-        """8 GB lossless: bf16 weights streamed layer-by-layer off the GPU.
-        The transformer alone is ~8 GB bf16, so whole-submodule offload
-        doesn't fit here; this is slower but the only granularity that does."""
-        pipe = Pipe.from_pretrained(
-            MODEL_ID, torch_dtype=torch.bfloat16,
-            cache_dir=self.models_dir)
-        pipe.enable_sequential_cpu_offload()
-        return pipe
+        """8 GB path: 8-bit text encoder + bf16 transformer, streamed off the GPU.
+        The bf16 transformer alone is ~8 GB, so only layer-level offload fits."""
+        try:
+            from diffusers import PipelineQuantizationConfig
+            quant = PipelineQuantizationConfig(
+                quant_backend="bitsandbytes_8bit",
+                quant_kwargs={"load_in_8bit": True},
+                components_to_quantize=["text_encoder"],
+            )
+            pipe = Pipe.from_pretrained(
+                MODEL_ID, torch_dtype=torch.bfloat16,
+                cache_dir=self.models_dir,
+                quantization_config=quant)
+            pipe.enable_sequential_cpu_offload()
+            return pipe
+        except Exception:
+            log.exception("8-bit offload failed; falling back to bf16 offload "
+                          "(works, but holds the full model in system RAM)")
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+            pipe = Pipe.from_pretrained(
+                MODEL_ID, torch_dtype=torch.bfloat16,
+                cache_dir=self.models_dir)
+            pipe.enable_sequential_cpu_offload()
+            return pipe
 
     @staticmethod
     def variant_seeds(seed, variants):

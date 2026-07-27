@@ -16,7 +16,7 @@ MODEL_GB = 15
 # metadata only, not a real import -- importing torch/diffusers costs seconds
 DEPS_PROBE = ("import importlib.metadata as m; "
               "[m.version(d) for d in ('websockets','diffusers','transformers',"
-              "'accelerate','peft','bitsandbytes','torchao','Pillow','numpy',"
+              "'accelerate','peft','bitsandbytes','Pillow','numpy',"
               "'scipy')]; print('ok')")
 TORCH_PROBE = "import importlib.metadata as m; print(m.version('torch'))"
 

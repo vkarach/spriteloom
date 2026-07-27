@@ -249,11 +249,14 @@ async def _serve_connection(ws):
                 log.debug("client gone before error could be delivered")
 
 
-def _preload_klein():
+def _preload_klein(on_fatal=None):
     """Warm the model at startup; a request arriving mid-load queues behind."""
     def done(f):
-        if f.exception():
-            log.error("klein preload failed: %r", f.exception())
+        exc = f.exception()
+        if exc:
+            log.error("model did not load: %s", exc)
+            if on_fatal:
+                on_fatal()
         else:
             log.info("klein preloaded, ready for prompts")
     _gpu_executor.submit(models.get, "klein").add_done_callback(done)
@@ -265,15 +268,22 @@ async def serve(host="127.0.0.1", port=8765, stop=None, on_ready=None,
         _register_default_models()
     # GIL-heavy worker; a short switch interval keeps pings answered
     sys.setswitchinterval(0.001)
+    loop = asyncio.get_running_loop()
+    if stop is None:
+        stop = loop.create_future()
     if preload:
-        _preload_klein()
+        # a failed load needs the user to act; exit rather than hang on 'loading'
+        def on_fatal():
+            loop.call_soon_threadsafe(
+                lambda: stop.done() or stop.set_result(None))
+        _preload_klein(on_fatal)
     # no keepalive: the 20s ping timeout killed sockets mid-job
     async with websockets.serve(_handler, host, port, max_size=64 * 2**20,
                                 ping_interval=None):
         log.info("Spriteloom server on ws://%s:%s", host, port)
         if on_ready:
             on_ready()
-        await (stop if stop is not None else asyncio.Future())
+        await stop
 
 
 if __name__ == "__main__":
@@ -281,9 +291,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     # The panel pings every 10s; websockets logs every open/close at INFO.
     logging.getLogger("websockets").setLevel(logging.WARNING)
-    # Benign on Windows: torchao has no Triton wheel, torch.distributed cannot
-    # redirect stdio. Both warn once at import; silence before torch loads.
-    logging.getLogger("torchao").setLevel(logging.ERROR)
+    # Benign on Windows: torch.distributed cannot redirect stdio; warns once
+    # at import. Silence before torch loads.
     logging.getLogger(
         "torch.distributed.elastic.multiprocessing.redirects"
     ).setLevel(logging.ERROR)
