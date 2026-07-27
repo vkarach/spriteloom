@@ -97,6 +97,15 @@ body {
   border-bottom: 1px solid var(--line); font-size: 13px;
 }
 .srow:last-child { border-bottom: 0; }
+.srow:has(+ .divider) { border-bottom: 0; }
+.divider { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.divider span {
+  color: var(--ink-dim); letter-spacing: 0.06em; font-size: 10px;
+  text-transform: uppercase;
+}
+.divider i { height: 1px; background: var(--line); display: block; }
+.divider i.short { width: 16px; flex: none; }
+.divider i.long { flex: 1; }
 .srow .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .srow .detail { color: var(--ink-faint); flex: none; font-size: 12px; }
 .srow.ok .mark, .srow.done .mark { color: var(--ok); }

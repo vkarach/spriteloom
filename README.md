@@ -96,10 +96,11 @@ the GPU:
    warning — `Spriteloom.exe` isn't code-signed, so it has no reputation
    yet. Click **More info**, then **Run anyway**.
 3. Press **Setup**. It shows what is missing: the environment, PyTorch,
-   the dependencies, the plugin, the model (~15 GB).
+   the dependencies, the plugin, the model (~15 GB), a Start Menu shortcut.
 4. Tick everything and press **Install selected**. It builds the `.venv`,
-   installs the packages and the plugin, downloads the model, and prints
-   a live log. Restart Aseprite once the plugin is in.
+   installs the packages and the plugin, downloads the model, adds a Start
+   Menu shortcut, and prints a live log. Restart Aseprite once the plugin
+   is in.
 
 **Start** stays disabled until every required piece — including the model —
 is in place; there is no lazy first-run download.

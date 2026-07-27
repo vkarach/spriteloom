@@ -1,4 +1,6 @@
 """What is already in place. Detection only, never a side effect."""
+import os
+import pathlib
 import shutil
 
 from launcher import plugin_install
@@ -66,9 +68,23 @@ def _model_item(paths) -> dict:
                  f"{_free_gb(paths.models_dir)} GB free", needs=["deps"])
 
 
+def shortcut_path() -> pathlib.Path | None:
+    base = os.environ.get("APPDATA")
+    return (pathlib.Path(base) / "Microsoft" / "Windows" / "Start Menu"
+            / "Programs" / "Spriteloom.lnk") if base else None
+
+
+def _shortcut_item(paths) -> dict:
+    lnk = shortcut_path()
+    state = OK if lnk and lnk.is_file() else MISSING
+    return _item("shortcut", "Start Menu shortcut", state,
+                 "created" if state == OK else "not created", required=False)
+
+
 def refresh_live(items: list[dict], paths) -> list[dict]:
     # filesystem-only, no subprocess -- cheap enough to run on every poll
-    fresh = {"plugin": _plugin_item, "model": _model_item}
+    fresh = {"plugin": _plugin_item, "model": _model_item,
+             "shortcut": _shortcut_item}
     return [fresh[it["id"]](paths) if it["id"] in fresh else it
             for it in items]
 
@@ -120,4 +136,5 @@ def check_all(paths, run=None) -> list[dict]:
 
     items.append(_plugin_item(paths))
     items.append(_model_item(paths))
+    items.append(_shortcut_item(paths))
     return items

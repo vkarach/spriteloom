@@ -137,3 +137,21 @@ def test_model_is_required(tmp_path):
                                          run=lambda cmd: None))
     assert items["model"]["required"] is True
     assert items["venv"]["required"] is True
+
+
+def test_shortcut_missing_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    items = by_id(setup_checks.check_all(make_paths(tmp_path),
+                                         run=lambda cmd: None))
+    assert items["shortcut"]["state"] == setup_checks.MISSING
+    assert items["shortcut"]["required"] is False
+
+
+def test_shortcut_ok_once_the_lnk_exists(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    lnk = setup_checks.shortcut_path()
+    lnk.parent.mkdir(parents=True)
+    lnk.write_text("", encoding="utf-8")
+    items = by_id(setup_checks.check_all(make_paths(tmp_path),
+                                         run=lambda cmd: None))
+    assert items["shortcut"]["state"] == setup_checks.OK

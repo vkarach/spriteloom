@@ -118,6 +118,30 @@ def test_command_for_plugin_is_not_a_subprocess(tmp_path):
     assert setup_steps.command("plugin", make_paths(tmp_path)) is None
 
 
+def test_command_for_shortcut_is_not_a_subprocess(tmp_path):
+    assert setup_steps.command("shortcut", make_paths(tmp_path)) is None
+
+
+def test_shortcut_skips_without_the_exe(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    logs = []
+    runner = setup_steps.Runner(make_paths(tmp_path),
+                                on_event=lambda *a: None,
+                                on_log=lambda line: logs.append(line))
+    assert runner._shortcut() is False
+    assert any("skipping shortcut" in l for l in logs)
+
+
+def test_shortcut_creates_a_real_lnk_next_to_the_exe(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    p = make_paths(tmp_path)
+    (p.root / "Spriteloom.exe").write_bytes(b"")
+    runner = setup_steps.Runner(p, on_event=lambda *a: None,
+                                on_log=lambda line: None)
+    assert runner._shortcut() is True
+    assert setup_checks.shortcut_path().is_file()
+
+
 def test_failure_skips_dependents(tmp_path):
     events = []
     runner = setup_steps.Runner(make_paths(tmp_path),

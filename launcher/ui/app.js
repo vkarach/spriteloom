@@ -234,7 +234,15 @@ function setupPaint(s) {
 
   const rows = $("setuprows");
   rows.innerHTML = "";
+  let optionalShown = false;
   s.items.forEach((item, i) => {
+    if (!item.required && !optionalShown) {
+      optionalShown = true;
+      const div = document.createElement("div");
+      div.className = "divider";
+      div.innerHTML = '<i class="short"></i><span>Optional</span><i class="long"></i>';
+      rows.appendChild(div);
+    }
     const row = document.createElement("div");
     row.className = "srow " + (item.step_state || item.state);
     const actionable = item.state !== "ok" && item.state !== "blocked";

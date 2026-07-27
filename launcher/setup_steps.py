@@ -11,12 +11,13 @@ from launcher.server_proc import (NO_WINDOW, assign_to_job, clean_line,
 # torch before deps: bitsandbytes pulls torch>=2.3,<3 on its own, and if
 # nothing satisfies that yet, pip installs a plain CPU build here that the
 # torch step then overwrites with the CUDA one
-ORDER = ("venv", "torch", "deps", "plugin", "model")
+ORDER = ("venv", "torch", "deps", "plugin", "model", "shortcut")
 LABELS = {"venv": "Creating virtual environment",
           "deps": "Installing server dependencies",
           "torch": "Installing PyTorch with CUDA",
           "plugin": "Installing the Aseprite plugin",
-          "model": "Downloading the model"}
+          "model": "Downloading the model",
+          "shortcut": "Creating a Start Menu shortcut"}
 TORCH_INDEX = "https://download.pytorch.org/whl/cu128"
 MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
 _PROGRESS_RE = re.compile(r"^Progress (\d+) of (\d+)$")
@@ -158,6 +159,8 @@ class Runner:
     def _one(self, step) -> bool:
         if step == "plugin":
             return self._plugin()
+        if step == "shortcut":
+            return self._shortcut()
         cmd = self.commands.get(step) or command(step, self.paths)
         return self._spawn(cmd)
 
@@ -174,6 +177,31 @@ class Runner:
             self.on_log(f"copy failed: {e}")
             return False
         self.on_log("plugin copied, restart Aseprite")
+        return True
+
+    def _shortcut(self) -> bool:
+        exe = self.paths.root / "Spriteloom.exe"
+        lnk = setup_checks.shortcut_path()
+        if not exe.is_file() or not lnk:
+            self.on_log("no exe or no Start Menu folder, skipping shortcut")
+            return False
+        lnk.parent.mkdir(parents=True, exist_ok=True)
+        ps = (f'$s = New-Object -ComObject WScript.Shell; '
+             f'$sc = $s.CreateShortcut("{lnk}"); '
+             f'$sc.TargetPath = "{exe}"; '
+             f'$sc.WorkingDirectory = "{self.paths.root}"; $sc.Save()')
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                capture_output=True, text=True, timeout=15,
+                creationflags=NO_WINDOW)
+        except (OSError, subprocess.SubprocessError) as e:
+            self.on_log(f"could not create shortcut: {e}")
+            return False
+        if result.returncode != 0:
+            self.on_log(f"shortcut creation failed: {result.stderr.strip()}")
+            return False
+        self.on_log("shortcut created")
         return True
 
     def _port(self) -> int:
