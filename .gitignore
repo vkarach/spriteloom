@@ -3,6 +3,9 @@ docs/
 samples/
 .superpowers/
 
+# Best generations staging, touch-up in progress (not shipped yet)
+_best-gens/
+
 # Python
 __pycache__/
 *.pyc
