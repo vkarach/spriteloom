@@ -1,9 +1,10 @@
 import asyncio
 import json
+import logging
 import threading
 import pytest
 import websockets
-from server.main import serve
+from server.main import serve, DropBenignHandshakeAborts
 
 HOST, PORT = "127.0.0.1", 8799  # test port, not the real 8765
 
@@ -43,3 +44,23 @@ def test_bad_request_returns_error(server_thread):
             await ws.send("{broken")
             return json.loads(await ws.recv())
     assert asyncio.run(go())["type"] == "error"
+
+
+def _record_with_exc(exc):
+    import sys
+    try:
+        raise exc
+    except type(exc):
+        return logging.LogRecord("websockets.server", logging.ERROR, __file__,
+                                 1, "opening handshake failed", (),
+                                 sys.exc_info())
+
+
+def test_drop_benign_handshake_aborts_swallows_connection_closed():
+    record = _record_with_exc(websockets.exceptions.ConnectionClosedError(None, None))
+    assert DropBenignHandshakeAborts().filter(record) is False
+
+
+def test_drop_benign_handshake_aborts_keeps_other_errors():
+    record = _record_with_exc(ValueError("bad handshake"))
+    assert DropBenignHandshakeAborts().filter(record) is True
