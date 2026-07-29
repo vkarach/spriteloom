@@ -9,6 +9,9 @@ _best-gens/
 # Final itch/promo assets, uploaded by hand, not part of the shipped repo
 _promo-final/
 
+# Agent scratch (mock renders, calc notes)
+.scratch/
+
 # Python
 __pycache__/
 *.pyc
