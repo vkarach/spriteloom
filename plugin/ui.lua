@@ -58,15 +58,23 @@ function U.drawChecker(gc, dx, dy, dw, dh)
   end
 end
 
--- Scale an image into a box, centered, on a checkerboard.
+-- Downscale to fit bw x bh, bilinear, never upscale - cache the result.
+function U.scaleToFit(img, bw, bh)
+  local s = math.min(1, bw / img.width, bh / img.height)
+  if s >= 1 then return img end
+  local out = img:clone()
+  out:resize{ width = math.max(1, math.floor(img.width * s)),
+              height = math.max(1, math.floor(img.height * s)),
+              method = "bilinear" }
+  return out
+end
+
+-- Draws an already-fitted image (scaleToFit) at 1:1, centered in the box.
 function U.drawThumb(gc, img, bx, by, bw, bh)
-  local s = math.min(bw / img.width, bh / img.height)
-  local dw = math.max(1, math.floor(img.width * s))
-  local dh = math.max(1, math.floor(img.height * s))
-  local dx, dy = bx + (bw - dw) // 2, by + (bh - dh) // 2
-  U.drawChecker(gc, dx, dy, dw, dh)
+  local dx, dy = bx + (bw - img.width) // 2, by + (bh - img.height) // 2
+  U.drawChecker(gc, dx, dy, img.width, img.height)
   gc:drawImage(img, Rectangle(0, 0, img.width, img.height),
-               Rectangle(dx, dy, dw, dh))
+               Rectangle(dx, dy, img.width, img.height))
 end
 
 -- Layout for a click-to-insert variant grid: 1-2 across, then 2, then 4.
