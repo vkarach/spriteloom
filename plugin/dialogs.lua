@@ -382,7 +382,7 @@ function D.open()
           else
             setState("done", "Removed variant " .. n .. ".")
           end
-        end)
+        end, mode == "edit")
       end,
       onerror = function(msg)
         setState("error", msg)

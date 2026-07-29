@@ -110,7 +110,8 @@ function S.paletteFromFile(path)
   return (ok and pal) and S.paletteColors(pal) or nil
 end
 
-function S.insertAsLayer(img, name)
+-- hideOthers: also hides every layer that's currently visible.
+function S.insertAsLayer(img, name, hideOthers)
   local spr = app.sprite
   if not spr then
     spr = Sprite(img.width, img.height)
@@ -122,14 +123,22 @@ function S.insertAsLayer(img, name)
     app.refresh()
     return { sprite = spr, layer = layer, created = true }
   end
-  local layer
+  local layer, hidden = nil, {}
   app.transaction("Spriteloom: insert variant", function()
+    if hideOthers then
+      for _, l in ipairs(spr.layers) do
+        if l.isVisible then
+          hidden[#hidden + 1] = l
+          l.isVisible = false
+        end
+      end
+    end
     layer = spr:newLayer()
     layer.name = name
     spr:newCel(layer, app.frame, img, Point(0, 0))
   end)
   app.refresh()
-  return { sprite = spr, layer = layer }
+  return { sprite = spr, layer = layer, hidden = hidden }
 end
 
 function S.removeInserted(entry)
@@ -139,6 +148,7 @@ function S.removeInserted(entry)
     else
       app.transaction("Spriteloom: remove variant", function()
         entry.sprite:deleteLayer(entry.layer)
+        for _, l in ipairs(entry.hidden or {}) do l.isVisible = true end
       end)
     end
   end)
@@ -147,13 +157,13 @@ function S.removeInserted(entry)
 end
 
 -- Toggle a variant in/out of the sprite; returns the new inserted entry.
-function S.toggleVariant(inserted, n, img, prefix)
+function S.toggleVariant(inserted, n, img, prefix, hideOthers)
   if inserted[n] then
     S.removeInserted(inserted[n])
     inserted[n] = nil
     return false
   end
-  inserted[n] = S.insertAsLayer(img, prefix .. n)
+  inserted[n] = S.insertAsLayer(img, prefix .. n, hideOthers)
   return true
 end
 

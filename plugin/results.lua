@@ -41,7 +41,8 @@ function R.showGrid(opts)
     onmouseup = function(ev)
       local n = ui.variantAt(ev, g, imgs, HEAD)
       if not n then return end
-      local added = sprite.toggleVariant(inserted, n, imgs[n], opts.prefix)
+      local added = sprite.toggleVariant(inserted, n, imgs[n], opts.prefix,
+                                        opts.hideOthers)
       if opts.onInserted then opts.onInserted(n, added) end
       curSeed = ui.seedText(seeds, n)
       dlg:modify{ id = "copyseed", text = "Copy seed" }
@@ -66,11 +67,11 @@ function R.showGrid(opts)
   app.refresh()
 end
 
-function R.showResults(imgs, seeds, onInserted)
+function R.showResults(imgs, seeds, onInserted, hideOthers)
   R.showGrid{
     title = "Spriteloom - Results (click a variant to insert)",
     imgs = imgs, seeds = seeds, prefix = "Spriteloom ",
-    onInserted = onInserted,
+    onInserted = onInserted, hideOthers = hideOthers,
   }
 end
 
