@@ -1,7 +1,15 @@
-import diffusers
+import sys
+import types
+
 from PIL import Image
 
 from server.instruct import INPAINT_MARGIN, INPAINT_SUFFIX, STEPS, KleinPipeline
+
+
+def _fake_diffusers(monkeypatch, fake_cls):
+    fake_module = types.ModuleType("diffusers")
+    fake_module.Flux2KleinInpaintPipeline = fake_cls
+    monkeypatch.setitem(sys.modules, "diffusers", fake_module)
 
 
 class _FakeResult:
@@ -44,7 +52,7 @@ def _sprite():
 
 
 def test_inpaint_shares_the_resident_modules_and_uses_a_full_schedule(monkeypatch):
-    monkeypatch.setattr(diffusers, "Flux2KleinInpaintPipeline", _FakeInpaintPipe)
+    _fake_diffusers(monkeypatch, _FakeInpaintPipe)
     _FakeInpaintPipe.calls.clear()
 
     pipe = KleinPipeline()
@@ -76,7 +84,7 @@ def test_inpaint_shares_the_resident_modules_and_uses_a_full_schedule(monkeypatc
 
 # regression guard: the old paste-after-the-fact composite let the model's own fill leak in
 def test_inpaint_mask_lines_up_with_the_prepped_image(monkeypatch):
-    monkeypatch.setattr(diffusers, "Flux2KleinInpaintPipeline", _FakeInpaintPipe)
+    _fake_diffusers(monkeypatch, _FakeInpaintPipe)
     _FakeInpaintPipe.calls.clear()
 
     pipe = KleinPipeline()
@@ -114,7 +122,7 @@ def test_prep_mask_grows_by_the_margin(monkeypatch):
 
 # regression guard: only the mask survives, so the inserted layer is just the new content
 def test_inpaint_discards_everything_outside_the_mask(monkeypatch):
-    monkeypatch.setattr(diffusers, "Flux2KleinInpaintPipeline", _FakeInpaintPipe)
+    _fake_diffusers(monkeypatch, _FakeInpaintPipe)
     _FakeInpaintPipe.calls.clear()
 
     pipe = KleinPipeline()
@@ -157,8 +165,7 @@ def test_inpaint_strips_background_left_inside_a_loose_mask(monkeypatch):
             img.paste(Image.new("RGBA", size, (10, 20, 30, 255)), (0, 0), content)
             return _FakeResult([img.copy()])
 
-    monkeypatch.setattr(diffusers, "Flux2KleinInpaintPipeline",
-                        _NarrowFakeInpaintPipe)
+    _fake_diffusers(monkeypatch, _NarrowFakeInpaintPipe)
 
     out = pipe.inpaint("add a hat", img, loose_mask, variants=1, seeds=[1])[0]
 
