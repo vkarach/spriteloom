@@ -14,9 +14,9 @@ import random
 import sys
 from collections.abc import ItemsView
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
 
-from server.postprocess import key_color
+from server.postprocess import key_color, remove_background
 
 MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
 STYLE_SUFFIX = (". Keep the same pixel art style, colors and character design."
@@ -26,6 +26,10 @@ GUIDANCE = 1.0
 T2I_SUFFIX = (" Flat 2D pixel art game sprite, crisp pixels, flat colors,"
               " clean outlines, single centered object on a plain solid"
               " background.")
+INPAINT_SUFFIX = (" Scale and place the new content to fit naturally onto"
+                  " the existing subject; do not enlarge it to fill the"
+                  " entire selection.")
+INPAINT_MARGIN = 2  # sprite pixels grown past the selection, so edge detail survives
 # 512px is plenty for pixel art; 1024px batches overflow 16 GB and WDDM
 # starts paging VRAM through system RAM (observed: 10x+ slowdown).
 MAX_SIDE = 512
@@ -243,6 +247,7 @@ class KleinPipeline:
         self.mode = mode
         self._resolved = None
         self._pipe = None
+        self._inpaint_pipe = None
 
     def _preflight(self, free_vram=None, total_vram=None):
         """Fail with a clear reason before a doomed load, not a native crash."""
@@ -464,20 +469,65 @@ class KleinPipeline:
             out.extend(img.crop((0, 0, bw, bh)) for img in imgs)
         return [i.convert("RGBA") for i in out]
 
+    def _inpaint_pipe_obj(self):
+        """Shares the resident pipe's already-placed modules (same VRAM, no
+        reload) instead of holding a second copy of the model."""
+        if self._inpaint_pipe is None:
+            from diffusers import Flux2KleinInpaintPipeline
+            self._inpaint_pipe = Flux2KleinInpaintPipeline(
+                vae=self._pipe.vae, text_encoder=self._pipe.text_encoder,
+                tokenizer=self._pipe.tokenizer, scheduler=self._pipe.scheduler,
+                transformer=self._pipe.transformer)
+        return self._inpaint_pipe
+
+    @staticmethod
+    def _prep_mask(mask, canvas_size, content_size):
+        """Same upscale/pad as _prep_input, so pixel (x, y) lines up in both."""
+        resized = mask.convert("L").resize(content_size, Image.NEAREST)
+        scale = max(1, content_size[0] // mask.width)
+        margin = INPAINT_MARGIN * scale
+        if margin > 0:
+            resized = resized.filter(ImageFilter.MaxFilter(margin * 2 + 1))
+        canvas = Image.new("L", canvas_size, 0)
+        canvas.paste(resized, (0, 0))
+        return canvas
+
     def inpaint(self, prompt, image, mask, variants=4, on_progress=None,
                 seeds=None):
-        """Klein edits the whole frame; only the masked region is kept."""
-        edits = self.edit_by_instruction(prompt, image, variants=variants,
-                                         on_progress=on_progress, seeds=seeds)
-        # the kept region needs the edit's key background, not black
-        src = flatten_to_key(image)[0].convert("RGBA")
-        big_src = src.resize(edits[0].size, Image.NEAREST)
-        big_mask = mask.convert("L").resize(edits[0].size, Image.NEAREST)
+        """Real masked diffusion: unmasked latents are locked to the source
+        at every step, so the model sees full context while drawing. The
+        result still keeps only the masked region though - everything else
+        goes fully transparent, so the inserted layer is just the new
+        content, not a redundant copy of the untouched sprite."""
+        self.load()
+        pipe = self._inpaint_pipe_obj()
+        big, (bw, bh) = self._prep_input(image)
+        big_mask = self._prep_mask(mask, big.size, (bw, bh))
+        blank = Image.new("RGBA", (bw, bh), (0, 0, 0, 0))
+        mask_content = big_mask.crop((0, 0, bw, bh))
+        seeds = seeds or self.variant_seeds(None, variants)
         out = []
-        for e in edits:
-            comp = big_src.copy()
-            comp.paste(e, (0, 0), big_mask)
-            out.append(comp)
+        cap = chunk_size(self._resolved, "edit")  # same image-conditioned cost
+        while len(out) < variants:
+            chunk = min(cap, variants - len(out))
+            imgs = pipe(
+                prompt=prompt + STYLE_SUFFIX + INPAINT_SUFFIX,
+                image=big, mask_image=big_mask,
+                strength=1.0,  # full STEPS-step schedule; the model is distilled for it
+                guidance_scale=GUIDANCE,
+                num_inference_steps=STEPS,
+                num_images_per_prompt=chunk,
+                generator=self._generators(seeds[len(out):len(out) + chunk]),
+                callback_on_step_end=self._cb(on_progress, len(out), chunk,
+                                              variants),
+            ).images
+            for img in imgs:
+                full = img.crop((0, 0, bw, bh)).convert("RGBA")
+                cleaned = remove_background(full, tolerance=16)
+                keep = ImageChops.multiply(mask_content, cleaned.getchannel("A"))
+                comp = blank.copy()
+                comp.paste(cleaned, (0, 0), keep)
+                out.append(comp)
         return out
 
     def txt2img(self, prompt, target_size, variants=4, on_progress=None,

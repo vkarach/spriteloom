@@ -150,7 +150,8 @@ def _run(req, on_progress, on_stage):
     out = []
     on_stage(f"Post-processing 0/{len(raw)}")
     for img in raw:
-        if req.background == "keep":
+        # inpaint's alpha is already exact from compositing, no flood needed
+        if req.background == "keep" or req.mode == "inpaint":
             cut = img.convert("RGBA")
         else:
             cut = remove_background(img, tolerance=16,
