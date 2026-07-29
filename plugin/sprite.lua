@@ -110,7 +110,14 @@ function S.paletteFromFile(path)
   return (ok and pal) and S.paletteColors(pal) or nil
 end
 
--- hideOthers: also hides every layer that's currently visible.
+local function eachLayer(layers, fn)
+  for _, l in ipairs(layers) do
+    fn(l)
+    if l.isGroup then eachLayer(l.layers, fn) end
+  end
+end
+
+-- hideOthers: also hides every layer that's currently visible, groups included.
 function S.insertAsLayer(img, name, hideOthers)
   local spr = app.sprite
   if not spr then
@@ -126,12 +133,12 @@ function S.insertAsLayer(img, name, hideOthers)
   local layer, hidden = nil, {}
   app.transaction("Spriteloom: insert variant", function()
     if hideOthers then
-      for _, l in ipairs(spr.layers) do
+      eachLayer(spr.layers, function(l)
         if l.isVisible then
           hidden[#hidden + 1] = l
           l.isVisible = false
         end
-      end
+      end)
     end
     layer = spr:newLayer()
     layer.name = name
