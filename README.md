@@ -112,6 +112,9 @@ If you would rather do it by hand:
 3. `.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu128`
 4. `install-plugin.bat`, then restart Aseprite.
 
+With the `.venv` set up this way, `start-server.bat` starts the server in a
+console window instead of through the launcher.
+
 To build the exe yourself from a full clone of this repository:
 `.venv\Scripts\python -m pip install -r launcher\requirements.txt`, then
 `.venv\Scripts\python -m PyInstaller build.spec --distpath .` -- it builds
@@ -122,8 +125,7 @@ and PyTorch stay outside it.
 
 1. Run `Spriteloom.exe`, press **START** and leave the window open. The dot
    turns green once the model is resident, about 25 seconds after a warm
-   start. Closing the window stops the server. (`start-server.bat` still
-   works if you prefer a console.)
+   start. Closing the window stops the server.
 2. In Aseprite: **Sprite → Spriteloom...** (or press **F1**). Pick a task,
    fill the fields, press **Run**. Results open in a separate window; click
    a variant to insert it as a new layer.
