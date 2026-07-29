@@ -7,10 +7,29 @@ No cloud, no subscription, your pixels never leave your machine.
 
 **[Sample output and how it works → vkarach.github.io/spriteloom](https://vkarach.github.io/spriteloom/)**
 
+<table align="center">
+<tr>
+<td rowspan="2" align="center" valign="middle">
+  <img src="assets/preview/generate.gif" width="539" alt="Generate">
+</td>
+<td align="center" valign="middle">
+  <img src="assets/preview/edit_with_ai.gif" width="260" alt="Edit with AI">
+</td>
+</tr>
+<tr>
+<td align="center" valign="middle">
+  <img src="assets/preview/inpaint.gif" width="260" alt="Inpaint">
+</td>
+</tr>
+</table>
+<p align="center"><em>Generate &middot; Edit with AI &middot; Inpaint</em></p>
+
 <p align="center">
-  <img src="assets/preview/generate.gif" width="700" alt="Spriteloom in action">
-  <br><em>Generating a sprite from a prompt, sped up 2x.</em>
+  <img src="assets/preview/rotate_front.gif" width="300" alt="Rotate, front view">
+  <img src="assets/preview/rotate_back.gif" width="300" alt="Rotate, back view">
+  <br><em>Rotate / Instruct, two different turnarounds</em>
 </p>
+<p align="center"><em>All clips sped up for the demo.</em></p>
 
 <p align="center">
   <img src="assets/gallery/tall-man.png" width="94" alt="tall man in a dark coat">
@@ -139,25 +158,32 @@ and PyTorch stay outside it.
    details if needed — the panel shows the exact text it will send.
 4. **Edit / Inpaint** take instructions, not a strength slider: say what to
    change and how much. Inpaint only touches the selection.
-5. **Advanced...** opens a separate window with Background, Palette, and Seed,
-   so the main panel never resizes.
-6. **Background**: Auto detects and strips a uniform background, Remove
+5. **Rotate / Instruct**: name the subject explicitly ("four-legged brown
+   horse", not "character"). Optional **Mirror symmetry** forces the result
+   left/right symmetric, which can help a front/back view hold together -
+   but it mirrors everything, including a one-handed weapon or an
+   asymmetric pose, so it can also make those look wrong. Try it, don't
+   assume it's always the better result.
+6. **Advanced...** opens a separate window with Background, Palette, Seed, and
+   Extra (appended to the prompt for Generate and Rotate/Instruct; Edit and
+   Inpaint ignore it).
+7. **Background**: Auto detects and strips a uniform background, Remove
    strips the dominant border color, Keep leaves it fully opaque.
-7. **Palette**: Auto derives colors per result; Current palette pins output to
+8. **Palette**: Auto derives colors per result; Current palette pins output to
    the open sprite's whole palette; Selected colors pins to only the swatches
    highlighted in the palette bar; Palette file pins to a `.gpl`/`.pal`/`.png`
    file so a batch of sprites shares one set of colors.
-8. **History** browses past generations (stored in `output/`), newest first;
+9. **History** browses past generations (stored in `output/`), newest first;
    click a run to see its variants, click a variant to insert it.
-9. **Rotate / Instruct**: name the subject explicitly ("four-legged brown
-   horse", not "character"), and enable Mirror symmetry for front/back views.
 
 ## How it works
 
 ```
-Aseprite plugin (Lua)  <--WebSocket-->  Python server  -->  FLUX.2 Klein (GPU)
-   dialogs, results,                     protocol,           single resident
-   history, layer insert                 postprocess         model, no swaps
++-----------------------+                     +---------------+       +--------------------+
+| Aseprite plugin (Lua) |  <-- WebSocket -->  | Python server |  -->  | FLUX.2 Klein (GPU) |
+|   dialogs, results,   |                     |   protocol,   |       |  single resident   |
+| history, layer insert |                     |  postprocess  |       |  model, no swaps   |
++-----------------------+                     +---------------+       +--------------------+
 ```
 
 - **One model, one warm-up.** Every task hits the same FLUX.2 Klein pipeline,
@@ -177,7 +203,7 @@ Aseprite plugin (Lua)  <--WebSocket-->  Python server  -->  FLUX.2 Klein (GPU)
 
 8-bit quantizing the Klein *transformer* produces pure noise in
 text-to-image (edits work fine). The shipped setup sidesteps this: 8-bit
-text encoder + bf16 transformer, fully resident. See `TODO.md`.
+text encoder + bf16 transformer, fully resident. See [TODO.md](TODO.md).
 
 ## Development
 
