@@ -12,6 +12,16 @@ def _fake_diffusers(monkeypatch, fake_cls):
     monkeypatch.setitem(sys.modules, "diffusers", fake_module)
 
 
+def _stub_pipe(monkeypatch):
+    """No real model, no torch: load() and _generators() are pure stand-ins."""
+    pipe = KleinPipeline()
+    pipe._pipe = _FakeResidentPipe()
+    pipe._resolved = "bf16"
+    monkeypatch.setattr(pipe, "load", lambda: None)
+    monkeypatch.setattr(pipe, "_generators", lambda seeds: list(seeds))
+    return pipe
+
+
 class _FakeResult:
     def __init__(self, images):
         self.images = images
@@ -54,11 +64,7 @@ def _sprite():
 def test_inpaint_shares_the_resident_modules_and_uses_a_full_schedule(monkeypatch):
     _fake_diffusers(monkeypatch, _FakeInpaintPipe)
     _FakeInpaintPipe.calls.clear()
-
-    pipe = KleinPipeline()
-    pipe._pipe = _FakeResidentPipe()
-    pipe._resolved = "bf16"
-    monkeypatch.setattr(pipe, "load", lambda: None)
+    pipe = _stub_pipe(monkeypatch)
 
     img = _sprite()
     mask = Image.new("L", img.size, 0)
@@ -86,11 +92,7 @@ def test_inpaint_shares_the_resident_modules_and_uses_a_full_schedule(monkeypatc
 def test_inpaint_mask_lines_up_with_the_prepped_image(monkeypatch):
     _fake_diffusers(monkeypatch, _FakeInpaintPipe)
     _FakeInpaintPipe.calls.clear()
-
-    pipe = KleinPipeline()
-    pipe._pipe = _FakeResidentPipe()
-    pipe._resolved = "bf16"
-    monkeypatch.setattr(pipe, "load", lambda: None)
+    pipe = _stub_pipe(monkeypatch)
 
     img = _sprite()
     mask = Image.new("L", img.size, 0)
@@ -124,11 +126,7 @@ def test_prep_mask_grows_by_the_margin(monkeypatch):
 def test_inpaint_discards_everything_outside_the_mask(monkeypatch):
     _fake_diffusers(monkeypatch, _FakeInpaintPipe)
     _FakeInpaintPipe.calls.clear()
-
-    pipe = KleinPipeline()
-    pipe._pipe = _FakeResidentPipe()
-    pipe._resolved = "bf16"
-    monkeypatch.setattr(pipe, "load", lambda: None)
+    pipe = _stub_pipe(monkeypatch)
 
     img = _sprite()
     mask = Image.new("L", img.size, 0)
@@ -144,10 +142,7 @@ def test_inpaint_discards_everything_outside_the_mask(monkeypatch):
 
 # regression guard: a mask looser than the new content used to leave the model's own bg opaque
 def test_inpaint_strips_background_left_inside_a_loose_mask(monkeypatch):
-    pipe = KleinPipeline()
-    pipe._pipe = _FakeResidentPipe()
-    pipe._resolved = "bf16"
-    monkeypatch.setattr(pipe, "load", lambda: None)
+    pipe = _stub_pipe(monkeypatch)
 
     img = _sprite()
     loose_mask = Image.new("L", img.size, 0)
