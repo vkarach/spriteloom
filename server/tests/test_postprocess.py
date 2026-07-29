@@ -157,6 +157,14 @@ def test_downscale_output_only_uses_palette_colors():
     assert out.getpixel((0, 0)) == (210, 8, 8, 255)
 
 
+def test_fit_into_upscale_has_no_gaps():
+    # every source pixel must reach the canvas even when target >> source
+    img = Image.new("RGBA", (4, 4), (255, 0, 0, 255))
+    out = fit_into(img, (16, 16), palette=[(255, 0, 0)])
+    arr = np.asarray(out)
+    assert (arr[:, :, 3] == 255).all()
+
+
 def test_fit_into_accepts_palette():
     img = Image.new("RGBA", (10, 20), (100, 200, 100, 255))
     out = fit_into(img, (16, 16), palette=[(0, 255, 0)])

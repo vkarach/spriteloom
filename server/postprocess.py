@@ -73,13 +73,24 @@ def _used_colors(q: Image.Image, max_colors: int) -> list[tuple[int, int, int]]:
     return [tuple(raw[i * 3: i * 3 + 3]) for i in used]
 
 
-def mirror_symmetry(img: Image.Image) -> Image.Image:
-    """Mirror the left half onto the right; odd widths keep the center."""
+def mirror_symmetry(img: Image.Image, head_frac: float = 0.2) -> Image.Image:
+    """Mirror around the head's own horizontal center, not the canvas or full
+    silhouette center - an asymmetric wing/weapon/pose otherwise skews the
+    axis away from the head and splits it into two."""
     arr = np.asarray(img.convert("RGBA")).copy()
     h, w = arr.shape[:2]
-    half = w // 2
-    arr[:, w - half:] = arr[:, :half][:, ::-1]
-    return Image.fromarray(arr, "RGBA")
+    alpha = arr[:, :, 3]
+    top_h = max(1, int(h * head_frac))
+    xs = np.nonzero(alpha[:top_h])[1]
+    axis = int(round(xs.mean())) if len(xs) else w // 2
+    radius = min(axis, w - 1 - axis)
+    x0, x1 = axis - radius, axis + radius + 1
+    window = arr[:, x0:x1]
+    half = window.shape[1] // 2
+    window[:, window.shape[1] - half:] = window[:, :half][:, ::-1]
+    out = np.zeros_like(arr)
+    out[:, x0:x1] = window
+    return Image.fromarray(out, "RGBA")
 
 
 def crop_to_subject(img: Image.Image, margin: float = 0.04) -> Image.Image:
@@ -106,7 +117,13 @@ def fit_into(img: Image.Image, target_size: tuple[int, int],
     scale = min(tw / img.width, th / img.height)
     fw = max(1, round(img.width * scale))
     fh = max(1, round(img.height * scale))
-    small = downscale(img, (fw, fh), palette=palette)
+    # enlarging past native size in downscale() leaves most cells voteless (transparent); quantize at native size, enlarge after
+    qscale = min(scale, 1.0)
+    qw = max(1, round(img.width * qscale))
+    qh = max(1, round(img.height * qscale))
+    small = downscale(img, (qw, qh), palette=palette)
+    if (qw, qh) != (fw, fh):
+        small = small.resize((fw, fh), Image.NEAREST)
     canvas = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
     canvas.paste(small, ((tw - fw) // 2, (th - fh) // 2))
     return canvas
