@@ -10,6 +10,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 
 import websockets
+import websockets.exceptions
 
 from server import models
 from server.postprocess import (crop_to_subject, fit_into, mirror_symmetry,
@@ -19,6 +20,20 @@ from server.protocol import ProtocolError, parse_request, error_msg, \
     progress_msg, result_msg
 
 log = logging.getLogger("spriteloom")
+
+
+class DropBenignHandshakeAborts(logging.Filter):
+    """The panel's ping keeps a short timeout and aborts sockets that don't
+    open fast enough, e.g. while the GPU worker's GIL-heavy model load stalls
+    the accept loop; websockets logs that abort as an ERROR. Drop only that
+    exact case so real handshake failures still show up."""
+
+    def filter(self, record):
+        exc = record.exc_info[0] if record.exc_info else None
+        return not (exc and issubclass(exc, websockets.exceptions.ConnectionClosed))
+
+
+logging.getLogger("websockets.server").addFilter(DropBenignHandshakeAborts())
 
 _gpu_executor = ThreadPoolExecutor(max_workers=1)
 DEBUG_DIR = pathlib.Path("output")
@@ -157,7 +172,7 @@ def _run(req, on_progress, on_stage):
             cut = remove_background(img, tolerance=16,
                                     force=req.background == "remove")
         # Not inpaint: cropping would break its mask alignment.
-        if req.mode in ("generate", "edit"):
+        if req.mode in ("generate", "edit") or req.symmetry:
             cut = crop_to_subject(cut)
         small = fit_into(cut, req.target_size,
                          palette=pal or subject_palette(cut, 16))

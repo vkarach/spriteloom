@@ -6,24 +6,24 @@ from server.postprocess import (
 )
 
 
-def test_mirror_symmetry_even_width():
+def test_mirror_symmetry_axis_from_head_region():
     from server.postprocess import mirror_symmetry
-    img = Image.new("RGBA", (4, 1), (0, 0, 0, 0))
-    img.putpixel((0, 0), (255, 0, 0, 255))
-    img.putpixel((1, 0), (0, 255, 0, 255))
-    out = mirror_symmetry(img)
-    assert out.getpixel((3, 0)) == (255, 0, 0, 255)  # mirrored from x=0
-    assert out.getpixel((2, 0)) == (0, 255, 0, 255)  # mirrored from x=1
+    img = Image.new("RGBA", (7, 2), (0, 0, 0, 0))
+    img.putpixel((3, 0), (10, 10, 10, 255))
+    img.putpixel((0, 1), (255, 0, 0, 255))
+    out = mirror_symmetry(img, head_frac=0.5)
+    assert out.getpixel((0, 1)) == (255, 0, 0, 255)
+    assert out.getpixel((6, 1)) == (255, 0, 0, 255)
 
 
-def test_mirror_symmetry_odd_width_keeps_center():
+def test_mirror_symmetry_keeps_original_past_canvas_edge():
     from server.postprocess import mirror_symmetry
-    img = Image.new("RGBA", (3, 1), (0, 0, 0, 0))
-    img.putpixel((0, 0), (255, 0, 0, 255))
-    img.putpixel((1, 0), (1, 2, 3, 255))  # center column
-    out = mirror_symmetry(img)
-    assert out.getpixel((1, 0)) == (1, 2, 3, 255)
-    assert out.getpixel((2, 0)) == (255, 0, 0, 255)
+    img = Image.new("RGBA", (5, 2), (0, 0, 0, 0))
+    img.putpixel((1, 0), (10, 10, 10, 255))
+    img.putpixel((4, 1), (1, 2, 3, 255))
+    out = mirror_symmetry(img, head_frac=0.5)
+    assert out.getpixel((2, 0)) == (0, 0, 0, 0)
+    assert out.getpixel((4, 1)) == (1, 2, 3, 255)
 
 
 def test_crop_to_subject_bounds():

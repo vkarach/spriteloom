@@ -32,7 +32,7 @@ local PAL_FILETYPES = { "gpl", "pal", "png", "aseprite", "ase", "act",
 
 -- Advanced params live in their own modal window so toggling them never
 -- resizes the main panel (Aseprite auto-sizes dialogs to their content).
-local function showAdvanced()
+local function showAdvanced(instruct)
   local a = Dialog{ title = "Spriteloom - Advanced", resizeable = false }
   a:combobox{ id = "background", label = "Background:",
              option = last.background, options = { "Auto", "Remove", "Keep" } }
@@ -48,6 +48,8 @@ local function showAdvanced()
   a:entry{ id = "seed", label = "Seed:", text = last.seed or "" }
   -- appended to the prompt for Generate and Instruct; other modes ignore it
   a:entry{ id = "extra", label = "Extra:", text = last.extra or "" }
+  a:check{ id = "symmetry", text = "Mirror symmetry (optional)",
+          selected = last.symmetry, visible = instruct }
   a:separator{}
   a:button{ id = "ok", text = "OK", focus = true, onclick = function()
     last.background = a.data.background
@@ -55,6 +57,7 @@ local function showAdvanced()
     last.palfile = a.data.palfile
     last.seed = a.data.seed
     last.extra = a.data.extra
+    last.symmetry = a.data.symmetry
     a:close()
   end }
   a:button{ text = "Cancel", onclick = function() a:close() end }
@@ -256,7 +259,6 @@ function D.open()
                 visible = m == "Edit with AI" or m == "Inpaint Selection" }
     dlg:modify{ id = "viewPreset", visible = instruct }
     dlg:modify{ id = "subject", visible = instruct }
-    dlg:modify{ id = "symmetry", visible = instruct }
     pinDown()
     updateHint()
   end
@@ -311,9 +313,8 @@ function D.open()
         return
       end
       last.view = d.viewPreset; last.subject = d.subject
-      last.symmetry = d.symmetry
       payload.prompt = instruction
-      payload.symmetry = d.symmetry
+      payload.symmetry = last.symmetry
       payload.target_size = { spr.width, spr.height }
       payload.frames = { { image = sprite.exportFrame() } }
     elseif mode == "generate" then
@@ -581,9 +582,6 @@ function D.open()
   dlg:entry{ id = "subject", label = "Subject:", text = last.subject,
              onchange = updateHint,
              visible = last.mode == "Rotate / Instruct" }
-  dlg:check{ id = "symmetry", text = "Mirror symmetry (front/back views)",
-             selected = last.symmetry,
-             visible = last.mode == "Rotate / Instruct" }
   local spr = app.sprite
   dlg:separator{ id = "sizeSep", text = "Size",
                  visible = last.mode == "Generate" }
@@ -597,7 +595,10 @@ function D.open()
   dlg:slider{ id = "variants", label = "Variants:", min = 1, max = 8,
               value = last.variants }
   dlg:button{ id = "advbtn", text = "Advanced...",
-              onclick = function() showAdvanced(); updateHint() end }
+              onclick = function()
+                showAdvanced(dlg.data.mode == "Rotate / Instruct")
+                updateHint()
+              end }
   dlg:separator{ text = "Status" }
   dlg:canvas{
     id = "view", width = STATUS_W, height = STATUS_H,

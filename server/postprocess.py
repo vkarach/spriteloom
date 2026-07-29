@@ -74,22 +74,19 @@ def _used_colors(q: Image.Image, max_colors: int) -> list[tuple[int, int, int]]:
 
 
 def mirror_symmetry(img: Image.Image, head_frac: float = 0.2) -> Image.Image:
-    """Mirror around the head's own horizontal center, not the canvas or full
-    silhouette center - an asymmetric wing/weapon/pose otherwise skews the
-    axis away from the head and splits it into two."""
+    """Mirror left onto right around the head's own center, not the canvas
+    center - an asymmetric wing or weapon would otherwise skew the axis."""
     arr = np.asarray(img.convert("RGBA")).copy()
     h, w = arr.shape[:2]
     alpha = arr[:, :, 3]
     top_h = max(1, int(h * head_frac))
     xs = np.nonzero(alpha[:top_h])[1]
     axis = int(round(xs.mean())) if len(xs) else w // 2
-    radius = min(axis, w - 1 - axis)
-    x0, x1 = axis - radius, axis + radius + 1
-    window = arr[:, x0:x1]
-    half = window.shape[1] // 2
-    window[:, window.shape[1] - half:] = window[:, :half][:, ::-1]
-    out = np.zeros_like(arr)
-    out[:, x0:x1] = window
+    dst = np.arange(axis + 1, w)
+    src = 2 * axis - dst
+    valid = (src >= 0) & (src < w)
+    out = arr.copy()
+    out[:, dst[valid]] = arr[:, src[valid]]
     return Image.fromarray(out, "RGBA")
 
 
