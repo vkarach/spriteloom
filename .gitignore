@@ -6,6 +6,9 @@ samples/
 # Best generations staging, touch-up in progress (not shipped yet)
 _best-gens/
 
+# Final itch/promo assets, uploaded by hand, not part of the shipped repo
+_promo-final/
+
 # Python
 __pycache__/
 *.pyc

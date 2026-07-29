@@ -7,23 +7,23 @@ No cloud, no subscription, your pixels never leave your machine.
 
 **[Sample output and how it works → vkarach.github.io/spriteloom](https://vkarach.github.io/spriteloom/)**
 
-<!-- Add the screencast GIF here once recorded; see assets/demo.gif -->
-<!-- ![Spriteloom in action](assets/demo.gif) -->
+<p align="center">
+  <img src="assets/preview/generate.gif" width="700" alt="Spriteloom in action">
+  <br><em>Generating a sprite from a prompt, sped up 2x.</em>
+</p>
 
 <p align="center">
-  <img src="assets/gallery/chest.png" width="110" alt="treasure chest">
-  <img src="assets/gallery/potion.png" width="110" alt="green potion">
-  <img src="assets/gallery/lantern.png" width="110" alt="iron lantern">
-  <img src="assets/gallery/cottage.png" width="110" alt="wooden cottage">
+  <img src="assets/gallery/tall-man.png" width="94" alt="tall man in a dark coat">
+  <img src="assets/gallery/adventurer.png" width="160" alt="adventurer in a red coat">
+  <img src="assets/gallery/explorer.png" width="160" alt="weathered explorer">
   <br>
-  <img src="assets/gallery/gate.png" width="110" alt="castle gate">
-  <img src="assets/gallery/fox.png" width="110" alt="red fox">
-  <img src="assets/gallery/dragon.png" width="110" alt="orange dragon">
-  <img src="assets/gallery/knight.png" width="110" alt="armored knight">
+  <img src="assets/gallery/cottage.png" width="160" alt="wooden cottage">
+  <img src="assets/gallery/lantern.png" width="160" alt="iron lantern">
+  <img src="assets/gallery/gold-coin.png" width="160" alt="gold coin">
 </p>
-<p align="center"><em>Real output, one generation each. Subjects like "wooden
-treasure chest with iron bands", "red fox with a bushy tail", "knight in steel
-plate armor". Scaled up with hard pixel edges for display.</em></p>
+<p align="center"><em>Real output, one generation each. Subjects like "tall man
+in a dark coat", "weathered explorer in a red leather coat", "wooden cottage,
+thatched roof". Scaled up with hard pixel edges for display.</em></p>
 
 ## What it is
 
@@ -104,6 +104,11 @@ the GPU:
 
 **Start** stays disabled until every required piece — including the model —
 is in place; there is no lazy first-run download.
+
+<p align="center">
+  <img src="assets/preview/setup.gif" width="400" alt="Setup running">
+  <br><em>Setup in action, sped up.</em>
+</p>
 
 If you would rather do it by hand:
 
