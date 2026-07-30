@@ -10,23 +10,23 @@ No cloud, no subscription, your pixels never leave your machine.
 <table align="center">
 <tr>
 <td rowspan="2" align="center" valign="middle">
-  <img src="assets/preview/generate.gif" width="539" alt="Generate">
+  <img src="assets/preview/generate.gif" width="522" alt="Generate">
 </td>
 <td align="center" valign="middle">
-  <img src="assets/preview/edit_with_ai.gif" width="260" alt="Edit with AI">
+  <img src="assets/preview/edit_with_ai.gif" width="243" alt="Edit with AI">
 </td>
 </tr>
 <tr>
 <td align="center" valign="middle">
-  <img src="assets/preview/inpaint.gif" width="260" alt="Inpaint">
+  <img src="assets/preview/inpaint.gif" width="243" alt="Inpaint">
 </td>
 </tr>
 </table>
 <p align="center"><em>Generate &middot; Edit with AI &middot; Inpaint</em></p>
 
 <p align="center">
-  <img src="assets/preview/rotate_front.gif" width="300" alt="Rotate, front view">
-  <img src="assets/preview/rotate_back.gif" width="300" alt="Rotate, back view">
+  <img src="assets/preview/rotate_front.gif" width="380" alt="Rotate, front view">
+  <img src="assets/preview/rotate_back.gif" width="380" alt="Rotate, back view">
   <br><em>Rotate / Instruct, two different turnarounds</em>
 </p>
 <p align="center"><em>All clips sped up for the demo.</em></p>
