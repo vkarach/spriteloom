@@ -70,10 +70,13 @@ def _save_debug(req, raw_images, final_images, seeds=None):
     if not DEBUG_SAVE:
         return
     try:
-        safe_id = "".join(c if c.isalnum() or c == "-" else "_" for c in req.id)
-        folder = DEBUG_DIR / (f"{time.strftime('%Y%m%d-%H%M%S')}_{req.mode}_"
-                              f"{_slug(req.prompt)}_{safe_id}")
-        folder.mkdir(parents=True, exist_ok=True)
+        base = f"{time.strftime('%Y%m%d-%H%M%S')}_{_slug(req.prompt)}"
+        folder = DEBUG_DIR / base
+        n = 2
+        while folder.exists():  # same second + same prompt: rare but possible
+            folder = DEBUG_DIR / f"{base}_{n}"
+            n += 1
+        folder.mkdir(parents=True)
         for n, img in enumerate(raw_images):
             img.save(folder / f"raw_{n}.png")
         for n, img in enumerate(final_images):

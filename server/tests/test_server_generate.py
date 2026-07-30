@@ -333,6 +333,20 @@ def test_seeds_reach_settings_json_and_history(monkeypatch, tmp_path):
     assert run["seeds"] == [7, 8]
 
 
+def test_save_debug_retries_folder_name_on_collision(monkeypatch, tmp_path):
+    monkeypatch.setattr(srv, "DEBUG_DIR", tmp_path)
+    monkeypatch.setattr(srv, "DEBUG_SAVE", True)
+    monkeypatch.setattr(srv.time, "strftime", lambda *_: "20260730-000000")
+    from server.protocol import Request
+    img = Image.new("RGBA", (8, 8))
+    req = Request(id="r", mode="generate", prompt="sword",
+                  target_size=(8, 8), variants=1)
+    srv._save_debug(req, [img], [img], [1])
+    srv._save_debug(req, [img], [img], [2])
+    names = sorted(p.name for p in tmp_path.iterdir())
+    assert names == ["20260730-000000_sword", "20260730-000000_sword_2"]
+
+
 def test_history_of_a_pre_seed_run_reports_no_seeds(monkeypatch, tmp_path):
     import json as _json
     monkeypatch.setattr(srv, "DEBUG_DIR", tmp_path)
