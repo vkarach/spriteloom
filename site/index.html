@@ -41,7 +41,7 @@
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
-  img { max-width: 100%; }
+  img, iframe { max-width: 100%; }
   a { color: var(--gold); text-decoration: none; }
   a:hover { text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 2px; }
@@ -63,14 +63,19 @@
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--line);
   }
-  .bar .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-weight: 700; letter-spacing: 0.02em; }
-  .brand .dot { width: 16px; height: 16px; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' width='4' height='16' fill='%23f2b23c'/><rect x='9' width='4' height='16' fill='%23f2b23c'/><rect y='3' width='16' height='4' fill='%23e8705a'/><rect y='9' width='16' height='4' fill='%23e8705a'/><rect x='3' y='3' width='4' height='4' fill='%23f2b23c'/><rect x='9' y='9' width='4' height='4' fill='%23f2b23c'/></svg>") center/contain no-repeat; }
-  .bar nav { display: flex; gap: 22px; font-size: 14px; }
+  .bar .wrap { display: flex; align-items: center; justify-content: space-between; height: 74px; }
+  .brand { display: flex; align-items: center; gap: 13px; font-family: var(--mono); font-weight: 700; font-size: 21px; letter-spacing: 0.02em; }
+  .brand .dot { width: 30px; height: 30px; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' width='4' height='16' fill='%23f2b23c'/><rect x='9' width='4' height='16' fill='%23f2b23c'/><rect y='3' width='16' height='4' fill='%23e8705a'/><rect y='9' width='16' height='4' fill='%23e8705a'/><rect x='3' y='3' width='4' height='4' fill='%23f2b23c'/><rect x='9' y='9' width='4' height='4' fill='%23f2b23c'/></svg>") center/contain no-repeat; }
+  .bar nav { display: flex; align-items: center; gap: 22px; font-size: 14px; }
   .bar nav a { color: var(--ink-dim); }
   .bar nav a:hover { color: var(--ink); text-decoration: none; }
-  .ghbtn { color: var(--ink) !important; border: 1px solid var(--line); padding: 7px 14px; border-radius: 6px; font-family: var(--mono); font-size: 13px; margin-left: 14px; }
+  .ghbtn { color: var(--ink) !important; border: 1px solid var(--line); padding: 8px 15px; border-radius: 6px; font-family: var(--mono); font-size: 13px; margin-left: 14px; }
   .ghbtn:hover { border-color: var(--gold); text-decoration: none; }
+  .dlbtn {
+    color: #17130a !important; background: var(--gold); border: 1px solid var(--gold);
+    padding: 8px 17px; border-radius: 6px; font-family: var(--mono); font-size: 13px; font-weight: 700;
+  }
+  .dlbtn:hover { background: var(--gold-deep); border-color: var(--gold-deep); text-decoration: none; }
   @media (max-width: 640px) { .bar nav .navlink { display: none; } }
 
   /* ---- hero ---- */
@@ -78,7 +83,7 @@
   .hero h1 {
     font-size: clamp(40px, 7vw, 76px);
     line-height: 1.02;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.012em;
     margin: 18px 0 0;
     text-wrap: balance;
     font-weight: 800;
@@ -102,10 +107,12 @@
   .btn.secondary:hover { border-color: var(--gold); text-decoration: none; }
   .badges { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); }
   .badges span::before { content: "▚ "; color: var(--gold); }
+  .getbox { margin-top: 36px; scroll-margin-top: 90px; }
+  .getbox iframe { display: block; }
 
   /* ---- checkerboard gallery ---- */
   .stage {
-    margin-top: 54px;
+    margin-top: 62px;
     border: 1px solid var(--line);
     border-radius: 14px;
     overflow: hidden;
@@ -140,7 +147,7 @@
   }
   .cell img {
     image-rendering: pixelated;
-    width: 156px; height: 156px; max-width: 100%; object-fit: contain;
+    width: 250px; height: 250px; max-width: 100%; object-fit: contain;
     transition: transform .18s ease;
   }
   .cell:hover img { transform: translateY(-4px) scale(1.06); }
@@ -175,6 +182,23 @@
   .task h3 { margin: 0; font-family: var(--mono); font-size: 16px; color: var(--gold); }
   .task p { margin: 10px 0 0; color: var(--ink-dim); font-size: 15px; }
   .task .ex { margin-top: 14px; font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); border-left: 2px solid var(--line); padding-left: 12px; }
+
+  /* ---- task demo clips ---- */
+  /* column ratio keeps the tall clip level with the two stacked ones, as in the README */
+  .demos { margin-top: 40px; display: grid; grid-template-columns: 2.068fr 1fr; gap: 12px; }
+  .demos .tall { grid-row: span 2; }
+  .demos img {
+    display: block; width: 100%; border: 1px solid var(--line); border-radius: 8px;
+  }
+  .demo-pair { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .demo-cap {
+    margin: 14px 0 0; text-align: center;
+    font-family: var(--mono); font-size: 13px; color: var(--ink-faint);
+  }
+  @media (max-width: 760px) {
+    .demos, .demo-pair { grid-template-columns: 1fr; }
+    .demos .tall { grid-row: auto; }
+  }
 
   /* ---- prompt recipe ---- */
   .recipe { margin-top: 34px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
@@ -244,6 +268,7 @@
       <a class="navlink" href="#how">How it works</a>
       <a class="navlink" href="#req">Requirements</a>
       <a class="ghbtn" href="https://github.com/vkarach/spriteloom">GitHub ↗</a>
+      <a class="dlbtn js-get" href="https://vkarach.itch.io/spriteloom/purchase?popup=1">Download</a>
     </nav>
   </div>
 </header>
@@ -260,7 +285,7 @@
         your existing pixels are never touched.
       </p>
       <div class="cta">
-        <a class="btn primary" href="https://github.com/vkarach/spriteloom">Get it on GitHub</a>
+        <a class="btn primary js-get" href="https://vkarach.itch.io/spriteloom/purchase?popup=1">Download</a>
         <a class="btn secondary" href="#how">See how it works</a>
       </div>
       <div class="badges">
@@ -269,10 +294,14 @@
         <span>Apache 2.0 licensed</span>
       </div>
 
+      <div class="getbox" id="get">
+        <iframe frameborder="0" src="https://itch.io/embed/4811635?bg_color=20242f&amp;fg_color=d3d7e0&amp;link_color=f2b23c&amp;border_color=2c313d" width="770" height="176"><a href="https://vkarach.itch.io/spriteloom">Spriteloom by vkarach</a></iframe>
+      </div>
+
       <div class="stage">
         <div class="stage-head">
           <span class="tl"></span><span class="tl"></span><span class="tl"></span>
-          <span class="title">results · hover a sprite</span>
+          <span class="title">made with Spriteloom, hover any sprite for its prompt</span>
         </div>
         <div class="grid">
           <div class="cell"><img src="img/tall-man.png"><details class="tag"><summary>see prompt</summary><p>A tall man in classic costume in classic three-quarter view game perspective, seen from slightly above.<span class="seed">seed 829855608</span></p></details></div>
@@ -319,6 +348,19 @@
           <div class="ex">"show the same character from behind"</div>
         </div>
       </div>
+
+      <div class="demos">
+        <img class="tall" src="img/generate.gif" alt="Generate running in Aseprite" loading="lazy">
+        <img src="img/edit_with_ai.gif" alt="Edit with AI running in Aseprite" loading="lazy">
+        <img src="img/inpaint.gif" alt="Inpaint Selection running in Aseprite" loading="lazy">
+      </div>
+      <p class="demo-cap">Generate &middot; Edit with AI &middot; Inpaint</p>
+
+      <div class="demo-pair">
+        <img src="img/rotate_front.gif" alt="Rotate, front view" loading="lazy">
+        <img src="img/rotate_back.gif" alt="Rotate, back view" loading="lazy">
+      </div>
+      <p class="demo-cap">Rotate / Instruct, two different turnarounds. All clips sped up.</p>
     </div>
   </section>
 
@@ -456,10 +498,11 @@
 
   <section class="final">
     <div class="wrap">
-      <h2>Forge your first sprite.</h2>
-      <p>Free, open source, and entirely yours to run. Full setup and docs live on GitHub.</p>
+      <h2>Weave your first sprite.</h2>
+      <p>Free, open source, and entirely yours to run. Grab the build on itch.io; setup and docs live on GitHub.</p>
       <div class="cta">
-        <a class="btn primary" href="https://github.com/vkarach/spriteloom">Open the repository ↗</a>
+        <a class="btn primary" href="https://vkarach.itch.io/spriteloom">Download on itch.io ↗</a>
+        <a class="btn secondary" href="https://github.com/vkarach/spriteloom">Open the repository ↗</a>
       </div>
     </div>
   </section>
@@ -479,5 +522,28 @@
       var t = localStorage.getItem("sf-theme");
       if (t) root.setAttribute("data-theme", t);
     } catch (e) {}
+  })();
+
+  // popup geometry matches Itch.attachBuyButton so it looks like the widget's own button
+  (function () {
+    var box = document.getElementById("get");
+    document.querySelectorAll("a.js-get").forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (box) {
+          var r = box.getBoundingClientRect();
+          if (r.top < 0 || r.bottom > (window.innerHeight || 0)) {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            return;
+          }
+        }
+        var w = 680, h = 400;
+        var top = (screen.height - h) / 2, left = (screen.width - w) / 2;
+        var win = window.open(a.href, "purchase",
+          "scrollbars=1, resizable=no, width=" + w + ", height=" + h +
+          ", top=" + top + ", left=" + left);
+        if (win && win.focus) win.focus();
+      });
+    });
   })();
 </script>
