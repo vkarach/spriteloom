@@ -122,7 +122,8 @@ def test_refresh_live_notices_a_deleted_plugin_without_a_full_recheck(tmp_path):
     items = setup_checks.check_all(p, run=lambda cmd: None)
     plugin_dir = plugin_install.dest_in(p.aseprite_dir)
     plugin_dir.mkdir(parents=True)
-    (plugin_dir / "package.json").write_text('{"version": "0.1.0"}',
+    bundled = plugin_install.read_version(plugin_install.source_dir())
+    (plugin_dir / "package.json").write_text(f'{{"version": "{bundled}"}}',
                                              encoding="utf-8")
     fresh = by_id(setup_checks.refresh_live(items, p))
     assert fresh["plugin"]["state"] == setup_checks.OK

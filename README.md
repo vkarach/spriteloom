@@ -107,10 +107,10 @@ the GPU:
 
 ## Install
 
-1. Download the latest release zip from the
-   [Releases page](https://github.com/vkarach/spriteloom/releases) and
-   unzip it anywhere. It has `Spriteloom.exe`, `server/`, and `plugin/`
-   together; nothing else to fetch first.
+1. Download the latest build from
+   [itch.io](https://vkarach.itch.io/spriteloom) and unzip it anywhere. It
+   has `Spriteloom.exe`, `server/`, and `plugin/` together; nothing else to
+   fetch first.
 2. Windows will likely show a "Windows protected your PC" SmartScreen
    warning — `Spriteloom.exe` isn't code-signed, so it has no reputation
    yet. Click **More info**, then **Run anyway**.

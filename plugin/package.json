@@ -2,7 +2,7 @@
   "name": "spriteloom",
   "displayName": "Spriteloom",
   "description": "Local AI pixel-art assistant (generate / edit / inpaint)",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": { "name": "Valentyn Karachevtsev" },
   "contributes": {
     "scripts": [{ "path": "./main.lua" }],

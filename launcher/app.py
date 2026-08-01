@@ -14,7 +14,7 @@ from server.config import (HOST, VRAM_MODES, load_port, load_settings,
                            load_vram_mode, save_port, save_settings,
                            save_vram_mode)
 
-VERSION = "0.1.0"
+VERSION = "1.0.0"
 TITLE = "Spriteloom"
 NARROW = 476
 # log panel width when open; matches NARROW so both panels are equal width
