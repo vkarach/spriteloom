@@ -6,8 +6,8 @@ samples/
 # Best generations staging, touch-up in progress (not shipped yet)
 _best-gens/
 
-# Final itch/promo assets, uploaded by hand, not part of the shipped repo
-_promo-final/
+# Private notes/promo working files (mirrored to a private repo)
+notes/
 
 # Agent scratch (mock renders, calc notes)
 .scratch/
